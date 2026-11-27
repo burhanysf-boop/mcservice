@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 import QRCode from 'qrcode';
@@ -61,6 +61,8 @@ function Desk({initialTicket}){
   const [technicians,setTechnicians]=useState([]), [cash,setCash]=useState([]), [directory,setDirectory]=useState([]);
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
+  const [queue,setQueue]=useState('all');
+  const detail=useRef(null);
   const id=session?.user?.id;
   const ticket=tickets.find(t=>t.id===selected);
   const name=code=>branches.find(b=>b.code===code)?.name || code;
@@ -110,7 +112,20 @@ function Desk({initialTicket}){
     });
     return ()=>{active=false};
   },[ticket]);
-  useEffect(()=>{if(print)window.print()},[print]);
+  useEffect(()=>{
+    const dialog=detail.current;
+    if(dialog && !dialog.open)dialog.showModal();
+  },[ticket?.id,view,creating]);
+  useEffect(()=>{
+    if(!print)return;
+    const dialog=detail.current;
+    if(dialog)dialog.dataset.printing='true';
+    dialog?.close();
+    try{window.print()}finally{
+      if(dialog?.isConnected&&!dialog.open)dialog.showModal();
+      setPrint(null);
+    }
+  },[print]);
 
   async function run(task){
     if(busy)return;
@@ -181,30 +196,37 @@ function Desk({initialTicket}){
     });
   }
   if(session===undefined)return <main>Memuat aplikasi…</main>;
-  if(!session)return <main className="narrow"><section className="panel"><h1>Makassar Computindo</h1><p>Masuk dengan akun petugas.</p>
+  if(!session)return <main className="login"><section className="login-brand"><strong>MAKASSAR COMPUTINDO</strong><h1>Sistem Servis</h1><p>Cabang Maros dan Makassar</p></section><section className="login-form"><h2>Masuk ke akun petugas</h2>
     <form className="grid" onSubmit={e=>{
       e.preventDefault();const f=new FormData(e.currentTarget);
       run(async()=>{const {error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)throw error});
     }}><Input name="email" label="Email" type="email" required/><Input name="password" label="Kata sandi" type="password" required/>
       <button className="primary" disabled={busy}>Masuk</button></form>{error&&<p className="error" role="alert">{error}</p>}
     </section></main>;
-  const visible=tickets.filter(t=>(!filter||t.intake===filter)&&[t.number,t.customer,t.device].some(s=>s.toLowerCase().includes(query.trim().toLowerCase())));
+  const queues=[
+    ['all','Semua servis',()=>true],
+    ['work','Proses servis',t=>Boolean(t.destination)||!['Siap diambil','Sudah diambil'].includes(t.status)],
+    ['ready','Siap diambil',t=>!t.destination&&t.status==='Siap diambil'],
+    ['done','Sudah diambil',t=>t.status==='Sudah diambil'],
+  ];
+  const inQueue=queues.find(([k])=>k===queue)[2];
+  const visible=tickets.filter(t=>inQueue(t)&&(!filter||t.intake===filter)&&[t.number,t.customer,t.device].some(s=>s.toLowerCase().includes(query.trim().toLowerCase())));
   const location=ticket?.location, active=ticket && ticket.status!=='Sudah diambil';
   const admin=ticket&&can('admin',location);
   const work=active&&!ticket.destination&&(admin||(ticket.assigned===id&&can('technician',location)));
   return <>
-    <header><strong>Makassar Computindo · Servis</strong><button onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button></header>
+    <div className="service-shell">
+      <aside className="sidebar">
+        <div className="sidebar-brand"><strong>Makassar Computindo</strong><span>Manajemen servis</span></div>
+        <nav aria-label="Menu petugas">
+          {queues.map(([k,label])=><a key={k} href="/" className={view==='tickets'&&queue===k?'active':''}
+            onClick={e=>{if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();setView('tickets');setQueue(k);setCreating(false);setSelected(null)}}>{label}</a>)}
+          {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
+          {owner&&<button className={view==='staff'?'active':''} onClick={openStaff}>Akses petugas</button>}
+        </nav>
+        <button className="sign-out" onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button>
+      </aside>
     <main className="dashboard">
-      <nav className="row">
-        <a className={'button'+(view==='tickets'?' primary':'')} href="/" aria-current={view==='tickets'?'page':undefined}
-          onClick={e=>{
-            if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||initialTicket)return;
-            e.preventDefault();
-            setView('tickets');setCreating(false);setSelected(null);
-          }}>Tiket servis</a>
-        {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
-        {owner&&<button className={view==='staff'?'active':''} onClick={openStaff}>Akses petugas</button>}
-      </nav>
       <p className="muted">{members.map(m=>roles[m.role]+(m.role==='owner'?'':' '+name(m.branch))).join(' · ') || 'Peran belum tersedia. Hubungi pemilik.'}</p>
       {error&&<p className="panel error" role="alert">{error}</p>}
       {view==='staff'&&owner&&<section className="panel"><h1>Akses petugas</h1><p>Akun login dibuat di Supabase Auth. Tetapkan aksesnya di sini.</p>
@@ -236,8 +258,10 @@ function Desk({initialTicket}){
           <label className="wide">Keluhan<textarea name="complaint" required maxLength={400}/></label>
           <button className="primary" disabled={busy}>Simpan tiket</button><button type="button" onClick={()=>setCreating(false)}>Batal</button>
         </form></section>}
-      {view==='tickets'&&!creating&&!ticket&&<section className="panel">
-        <div className="row between"><h1>Antrean servis</h1>{hasRole('admin')&&<button className="primary" onClick={()=>setCreating(true)}>Terima servis</button>}</div>
+      {view==='tickets'&&!creating&&<section className="panel">
+        <div className="row between"><h1>{queues.find(([k])=>queue===k)[1]}</h1>{hasRole('admin')&&<button className="primary" onClick={()=>setCreating(true)}>Terima servis</button>}</div>
+        <div className="queue-cards">{queues.map(([k,label,match])=><button key={k} className={queue===k?'queue-active':''} onClick={()=>setQueue(k)}>
+          {label}<strong>{tickets.filter(t=>(!filter||t.intake===filter)&&match(t)).length}</strong></button>)}</div>
         <div className="row"><input aria-label="Cari servis" placeholder="Cari tiket, pelanggan, perangkat" value={query} onChange={e=>setQuery(e.target.value)}/>
           <select aria-label="Cabang penerimaan" value={filter} onChange={e=>setFilter(e.target.value)}><option value="">Semua cabang penerimaan</option>
             {branchChoices.map(([b,n])=><option value={b} key={b}>{n}</option>)}</select>
@@ -253,12 +277,31 @@ function Desk({initialTicket}){
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
           {!visible.length&&<tr><td colSpan="7">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
       </section>}
-      {view==='tickets'&&ticket&&!creating&&<article key={ticket.id+ticket.updated_at}>
-        <section className="panel"><div className="row between"><h1>{ticket.number}</h1><button onClick={()=>setSelected(null)}>Kembali</button></div>
-          <p><strong>{ticket.device}</strong> · {ticket.customer} · {when(ticket.created_at)}</p>
-          <p>{ticket.complaint}</p><p>Diterima {name(ticket.intake)} · Barang di {name(location)}{ticket.destination&&' → '+name(ticket.destination)} · Ambil di {name(ticket.pickup)}</p>
-          <p><span className="tag">{ticket.destination?'Dalam perjalanan':ticket.status}</span> · Teknisi {ticket.technician||'Belum ditugaskan'}</p>
-          <p>Biaya {money(ticket.cost)} · DP {money(ticket.deposit)} · Dibayar setelah DP {money(ticket.settlement)}</p>
+      {view==='tickets'&&ticket&&!creating&&<dialog ref={detail} aria-labelledby="ticket-title" onClose={e=>{if(e.currentTarget.dataset.printing){delete e.currentTarget.dataset.printing;return}setSelected(null)}}><article key={ticket.id+ticket.updated_at}>
+        <section className="panel"><div className="row between"><h2 id="ticket-title">Servis {ticket.number}</h2><button onClick={()=>detail.current?.close()}>Tutup</button></div>
+          {error&&<p className="error" role="alert">{error}</p>}
+          <p className="muted">Diterima {when(ticket.created_at)} · {name(ticket.intake)} · Ambil di {name(ticket.pickup)}</p>
+          <p><span className="tag">{ticket.destination?'Dalam perjalanan':ticket.status}</span> · Barang di {name(location)}{ticket.destination&&' → '+name(ticket.destination)}</p>
+          <div className="grid ticket-fields">
+            <label>Nama pelanggan<input readOnly value={ticket.customer}/></label>
+            <label>Nomor WhatsApp<input readOnly value={ticket.phone}/></label>
+            <label>Perangkat<input readOnly value={ticket.device}/></label>
+            <label>Kelengkapan<input readOnly value={ticket.accessories}/></label>
+            <label className="wide">Keluhan<textarea readOnly value={ticket.complaint}/></label>
+            <label>Penerima<input readOnly value={ticket.receiver}/></label>
+            <label>Teknisi<input readOnly value={ticket.technician||'Belum ditugaskan'}/></label>
+          </div>
+          <form className="grid ticket-fields" onSubmit={e=>command(e,'work',location)}>
+            {work?<><Select name="status" label="Status servis" value={ticket.status} choices={statuses.map(s=>[s,s])}/>
+            <Input name="warranty" label="Garansi (hari)" type="number" value={ticket.warranty}/>
+            <Input name="cost" label="Biaya akhir (Rp)" type="number" value={ticket.cost}/></>:
+            <><label>Status servis<input readOnly value={ticket.status}/></label><label>Garansi (hari)<input readOnly value={ticket.warranty}/></label>
+            <label>Biaya akhir (Rp)<input readOnly value={ticket.cost??''}/></label></>}
+            <label>Total sudah dibayar (Rp)<input readOnly value={ticket.deposit+ticket.settlement}/></label>
+            {work?<><label className="wide">Hasil pemeriksaan dan tindakan<textarea name="action_taken" defaultValue={ticket.action_taken} maxLength={500}/></label>
+            <div className="wide"><button className="primary" disabled={busy}>Simpan pengerjaan</button></div></>:
+            ticket.action_taken&&<label className="wide">Hasil pemeriksaan dan tindakan<textarea readOnly value={ticket.action_taken}/></label>}
+          </form>
           <div className="row">
             <a className="button" href={tracking(ticket.token)} target="_blank" rel="noreferrer">Lacak servis</a>
             {ticket.phone&&<a className="button" href={'https://wa.me/'+ticket.phone.replace(/\D/g,'').replace(/^0/,'62')+'?text='+encodeURIComponent('Halo, lacak servis '+ticket.number+' di '+tracking(ticket.token))} target="_blank" rel="noreferrer">Bagikan lewat WhatsApp</a>}
@@ -271,13 +314,6 @@ function Desk({initialTicket}){
           <form className="row" onSubmit={e=>command(e,'send',location)}><Select name="target" label="Kirim ke cabang" choices={branchChoices.filter(([b])=>b!==location)}/><button disabled={busy}>Kirim barang</button></form>
         </section>}
         {active&&ticket.destination&&can('admin',ticket.destination)&&<section className="panel"><form onSubmit={e=>command(e,'receive',ticket.destination)}><button disabled={busy}>Konfirmasi terima di {name(ticket.destination)}</button></form></section>}
-        {work&&<section className="panel"><h2>Pengerjaan</h2><form className="grid" onSubmit={e=>command(e,'work',location)}>
-          <Select name="status" label="Status servis" value={ticket.status} choices={statuses.map(s=>[s,s])}/>
-          <Input name="cost" label="Biaya akhir (Rp)" type="number" value={ticket.cost}/>
-          <Input name="warranty" label="Garansi (hari)" type="number" value={ticket.warranty}/>
-          <label className="wide">Hasil pemeriksaan dan tindakan<textarea name="action_taken" defaultValue={ticket.action_taken} maxLength={500}/></label>
-          <button disabled={busy}>Simpan pengerjaan</button>
-        </form></section>}
         {active&&[['deposit',ticket.intake],['settlement',ticket.pickup]].filter(([cmd,b])=>can('cashier',b)&&(cmd==='deposit'||ticket.cost!==null)).map(([cmd,b])=>
           <section className="panel" key={cmd}><h2>{eventNames[cmd]} · {name(b)}</h2><form className="row" onSubmit={e=>command(e,cmd,b)}>
             <Input name="amount" label="Nominal (Rp)" type="number" required/>
@@ -288,8 +324,8 @@ function Desk({initialTicket}){
             <Input name="handed_by" label="Nama penyerah" required/><Input name="picked_by" label="Nama pengambil" required/><button disabled={busy}>Serahkan barang</button></form>
         </section>}
         <section className="panel"><h2>Riwayat tiket</h2><ul>{events.map(e=><li key={e.id}>{when(e.at)} · {name(e.branch)} · {eventNames[e.event]} {e.detail&&'· '+name(e.detail)} {e.amount&&'· '+money(e.amount)}</li>)}</ul></section>
-      </article>}
-    </main>
+      </article></dialog>}
+    </main></div>
     {print&&<PrintSheet {...print} pickupName={name(print.ticket.pickup)}/>}
   </>;
 }
