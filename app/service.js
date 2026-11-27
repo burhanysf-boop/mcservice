@@ -22,6 +22,14 @@ function serviceDuration(ticket) {
 
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Makassar'}).format(new Date());
 const tracking = token => window.location.origin + '/?lacak=' + token;
+const waUrl = phone => 'https://wa.me/' + phone.replace(/\D/g,'').replace(/^0/,'62');
+function WaLink({phone}) {
+  if (!phone) return '—';
+  return <a className="wa-link" href={waUrl(phone)} target="_blank" rel="noreferrer" title={'Chat WhatsApp ' + phone} aria-label={'Chat WhatsApp ' + phone}>
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2zm0 18.2a8.2 8.2 0 0 1-4.2-1.2l-.3-.2-3 .8.8-2.9-.2-.3A8.2 8.2 0 1 1 12 20.2z"/></svg>
+    <span>{phone}</span>
+  </a>;
+}
 
 // Menerjemahkan error database menjadi pesan yang dapat dipahami petugas.
 function friendly(e) {
@@ -319,14 +327,14 @@ function Desk({initialTicket}){
           <button disabled={busy} onClick={()=>run(async()=>setTickets(await loadTickets()))}>Muat ulang</button>
         </div>
         {initialTicket&&!opening&& !tickets.some(t=>t.id===initialTicket)&&<p>Tiket dari tautan tidak tersedia untuk akun ini.</p>}
-        <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>WhatsApp</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
+        <div className="scroll"><table><thead><tr><th>No. servis</th><th>Pelanggan</th><th>WhatsApp</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
           <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
               if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
               e.preventDefault();setSelected(t.id);
-            }}>{t.number}</a><br/>{t.customer}</td><td>{t.phone?<a href={'https://wa.me/'+t.phone.replace(/\D/g,'').replace(/^0/,'62')} target="_blank" rel="noreferrer">{t.phone}</a>:'—'}</td><td>{t.device}</td><td>{name(t.intake)}</td>
+            }}>{t.number}</a></td><td>{t.customer}</td><td><WaLink phone={t.phone}/></td><td>{t.device}</td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td className="duration">{serviceDuration(t)}</td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
-          {!visible.length&&<tr><td colSpan="9">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
+          {!visible.length&&<tr><td colSpan="10">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
       </section>}
       {view==='tickets'&&ticket&&!creating&&<dialog ref={detail} aria-labelledby="ticket-title" onClose={e=>{if(e.currentTarget.dataset.printing){delete e.currentTarget.dataset.printing;return}setSelected(null)}}><article key={ticket.id+ticket.updated_at}>
         <section className="panel"><div className="row between"><h2 id="ticket-title">Servis {ticket.number}</h2><button onClick={()=>detail.current?.close()}>Tutup</button></div>

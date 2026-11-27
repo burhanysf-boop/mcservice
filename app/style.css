@@ -64,6 +64,8 @@ th{background:#f3f7fb;font-size:13px}
 }
 
 .ticket-link{color:#1759a8;font-weight:700;text-underline-offset:2px}
+.wa-link{display:inline-flex;align-items:center;gap:6px;color:#128c4a;font-weight:650;text-decoration:none;white-space:nowrap}
+.wa-link:hover{text-decoration:underline}
 
 .login{display:grid;grid-template-columns:1fr 1fr;max-width:850px;margin:12vh auto;border-radius:18px;overflow:hidden;background:#fff;border:1px solid #dce4ef;box-shadow:0 18px 55px #11284214}
 .login-brand{background:#12243b;color:#fff;padding:clamp(24px,5vw,53px);display:flex;flex-direction:column;justify-content:center}
