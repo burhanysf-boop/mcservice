@@ -4,7 +4,7 @@ Aplikasi Next.js dengan Supabase Auth dan PostgreSQL untuk Maros dan Makassar.
 
 ## Supabase
 
-1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql`, lalu `supabase/002_cabang.sql`, lalu `supabase/003_perbaikan.sql`, lalu `supabase/004_edit_batal_token.sql` via SQL Editor. Proyek yang sudah memakai 002 cukup menjalankan 003 dan 004 secara berurutan. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
+1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql`, lalu `supabase/002_cabang.sql`, lalu `supabase/003_perbaikan.sql`, lalu `supabase/004_edit_batal_token.sql`, lalu `supabase/005_nama_petugas.sql` via SQL Editor. Proyek yang sudah memakai 002 cukup menjalankan 003, 004, dan 005 secara berurutan. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
 2. Di Authentication, tambahkan pengguna dengan email dan kata sandi, lalu salin UUID pengguna pemilik. Nonaktifkan pendaftaran mandiri untuk aplikasi internal.
 3. Buat akses pemilik pertama via SQL Editor:
 
@@ -14,7 +14,7 @@ Aplikasi Next.js dengan Supabase Auth dan PostgreSQL untuk Maros dan Makassar.
    ```
 
 4. Isi alamat dan WhatsApp cabang Makassar pada tabel `branches`. Data Maros diambil dari contoh tanda terima dan dapat disesuaikan.
-5. Tambahkan akun petugas lainnya di Authentication. Pemilik membuka **Akses petugas** untuk menetapkan peran dan cabang. Satu pengguna dapat memperoleh lebih dari satu peran.
+5. Tambahkan akun petugas lainnya di Authentication. Pemilik membuka **Akses petugas** untuk menetapkan peran dan cabang, lalu mengisi **Nama petugas** untuk setiap akun. Satu pengguna dapat memperoleh lebih dari satu peran. Nama ini dipakai sebagai petugas penerima dan nama teknisi; petugas tanpa nama tidak bisa menerima servis atau ditugaskan.
 6. Isi `.env.local` dari `.env.example` dengan Project URL dan Publishable Key. Kunci secret dan service role tidak diperlukan.
 
 ## Uji database

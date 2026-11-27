@@ -12,6 +12,11 @@ insert into auth.users(id,email) values
  ('10000000-0000-0000-0000-000000000003','uji-kasir-mrs@uji'),
  ('10000000-0000-0000-0000-000000000004','uji-admin-mks@uji'),
  ('10000000-0000-0000-0000-000000000005','uji-orang-luar@uji');
+insert into public.profiles(user_id,display_name) values
+ ('10000000-0000-0000-0000-000000000001','Admin MRS'),
+ ('10000000-0000-0000-0000-000000000002','Teknisi MRS'),
+ ('10000000-0000-0000-0000-000000000003','Kasir MRS'),
+ ('10000000-0000-0000-0000-000000000004','Admin MKS');
 insert into public.staff(user_id,role,branch) values
  ('10000000-0000-0000-0000-000000000001','admin','MRS'),
  ('10000000-0000-0000-0000-000000000002','technician','MRS'),
@@ -52,6 +57,7 @@ end $$;
 select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
 select public.service_command('create',null,'MRS','{"customer":"Budi","device":"Laptop","complaint":"Mati","receiver":"Ani","estimate":"100000"}',gen_random_uuid()) as t1 \gset
 select pg_temp.harus(exists(select 1 from public.tickets where id=:'t1' and status='Belum dicek'), 'tiket baru dibuat dengan status Belum dicek');
+select pg_temp.harus((select receiver from public.tickets where id=:'t1')='Admin MRS', 'petugas penerima diambil dari nama profil, bukan input klien');
 select public.service_command('edit',:'t1','MRS','{"customer":"Budi Santoso","phone":"","device":"Laptop Asus","serial":"SN1","accessories":"Charger","complaint":"Mati total","receiver":"Ani"}',gen_random_uuid());
 select pg_temp.harus((select customer='Budi Santoso' and device='Laptop Asus' from public.tickets where id=:'t1'), 'edit mengubah data pelanggan');
 select pg_temp.harus_gagal($q$select public.service_command('edit','$q$||:'t1'||$q$','MRS','{"customer":"   "}',gen_random_uuid())$q$, 'violates check constraint');
@@ -80,6 +86,26 @@ reset role;
 select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
 select public.service_command('create',null,'MRS','{"customer":"Cici","device":"HP","complaint":"Layar","receiver":"Ani"}',gen_random_uuid()) as t2 \gset
 select public.service_command('assign',:'t2','MRS','{"technician":"10000000-0000-0000-0000-000000000002","name":"uji-teknisi-mrs@uji"}',gen_random_uuid());
+select pg_temp.harus((select technician='Teknisi MRS' from public.tickets where id=:'t2'), 'nama teknisi diambil dari nama tampilan, bukan email');
+reset role;
+-- Teknisi tanpa nama tampilan tidak boleh ditugaskan
+insert into auth.users(id,email) values ('10000000-0000-0000-0000-000000000006','uji-tanpa-nama@uji');
+insert into public.staff(user_id,role,branch) values ('10000000-0000-0000-0000-000000000006','technician','MRS');
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select pg_temp.harus_gagal($q$select public.service_command('assign','$q$||:'t2'||$q$','MRS','{"technician":"10000000-0000-0000-0000-000000000006"}',gen_random_uuid())$q$, 'Nama teknisi belum diatur');
+-- Pengguna tanpa nama tampilan tidak bisa membuat tiket
+reset role;
+insert into auth.users(id,email) values ('10000000-0000-0000-0000-000000000007','uji-tanpa-nama-admin@uji');
+insert into public.staff(user_id,role,branch) values ('10000000-0000-0000-0000-000000000007','admin','MRS');
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000007');
+select pg_temp.harus_gagal($q$select public.service_command('create',null,'MRS','{"customer":"Eka","device":"PC","complaint":"Lambat","receiver":"Bebas"}',gen_random_uuid())$q$, 'Nama petugas belum diatur');
+reset role;
+-- Nama hanya bisa diatur pemilik atau pengguna itu sendiri
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000002');
+select pg_temp.harus_gagal($q$select public.set_display_name('10000000-0000-0000-0000-000000000003','Curang')$q$, 'Akses ditolak');
+select public.set_display_name('10000000-0000-0000-0000-000000000002','Teknisi MRS Baru');
+reset role;
+select pg_temp.harus((select display_name from public.profiles where user_id='10000000-0000-0000-0000-000000000002')='Teknisi MRS Baru', 'pengguna dapat mengubah namanya sendiri');
 reset role;
 select pg_temp.sebagai('10000000-0000-0000-0000-000000000002');
 select pg_temp.harus_gagal($q$select public.service_command('cancel','$q$||:'t2'||$q$','MRS','{"reason":"Coba","refund":"0"}',gen_random_uuid())$q$, 'Akses ditolak');

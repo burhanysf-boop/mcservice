@@ -91,6 +91,7 @@ function Desk({initialTicket}){
   const [technicians,setTechnicians]=useState([]), [cash,setCash]=useState([]), [directory,setDirectory]=useState([]);
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
+  const [myName,setMyName]=useState('');
   const [showPassword,setShowPassword]=useState(false);
   const [queue,setQueue]=useState('all');
   const detail=useRef(null);
@@ -106,6 +107,10 @@ function Desk({initialTicket}){
     const {data}=db.auth.onAuthStateChange((_,current)=>setSession(current));
     return ()=>data.subscription.unsubscribe();
   },[]);
+  useEffect(()=>{
+    if(!id)return;
+    db.from('profiles').select('display_name').eq('user_id',id).maybeSingle().then(({data})=>setMyName(data?.display_name||''));
+  },[id]);
   async function loadTickets(){
     const all=[];
     for(let start=0;;start+=500){
@@ -162,7 +167,6 @@ function Desk({initialTicket}){
     e.preventDefault();
     const fields=Object.fromEntries(new FormData(e.currentTarget));
     for(const k of Object.keys(fields))if(fields[k]==='')fields[k]=null;
-    if(cmd==='assign')fields.name=technicians.find(t=>t.user_id===fields.technician)?.email;
     const form=e.currentTarget;
     const request= formOperation(form,fields);
     return run(async()=>{
@@ -274,6 +278,11 @@ function Desk({initialTicket}){
         </form>
         <ul>{directory.filter(u=>u.role).map(u=><li key={u.user_id+u.role+u.branch}>{u.email} · {roles[u.role]} {name(u.branch)} {' '}
           <button disabled={busy||(u.user_id===id&&u.role==='owner')} onClick={()=>roleChange(u.user_id,u.role,u.branch,false)}>Cabut</button></li>)}</ul>
+        <h2>Nama petugas</h2><p className="muted">Nama ini dipakai sebagai petugas penerima dan nama teknisi pada tiket.</p>
+        {[...new Map(directory.map(u=>[u.user_id,u])).values()].map(u=><form key={u.user_id} className="row" onSubmit={e=>{
+          e.preventDefault();const f=new FormData(e.currentTarget);
+          run(async()=>{const {error}=await db.rpc('set_display_name',{person:u.user_id,name:f.get('name')});if(error)throw error;await refreshStaff();});
+        }}><span>{u.email}</span><input name="name" defaultValue={u.display_name||''} maxLength={80} placeholder="Nama tampilan" required/><button disabled={busy}>Simpan nama</button></form>)}
       </section>}
       {view==='cash'&&hasRole('cashier')&&<section className="panel"><h1>Rekap kas</h1>
         <form className="grid" onSubmit={report}>
@@ -287,7 +296,7 @@ function Desk({initialTicket}){
       {view==='tickets'&&creating&&<section className="panel"><h1>Terima servis</h1>
         <form className="grid" onSubmit={e=>command(e,'create')}>
           <Select name="branch" label="Cabang penerimaan" choices={branchChoices.filter(([b])=>can('admin',b))}/>
-          <Input name="receiver" label="Petugas penerima" required maxLength={80}/>
+          <label>Petugas penerima<input readOnly value={myName||'Nama belum diatur di Akses petugas'}/></label>
           <Select name="pickup" required={false} label="Cabang pengambilan" choices={[["","Sama dengan cabang penerimaan"],...branchChoices]}/>
           <Input name="customer" label="Pelanggan" required maxLength={100}/><Input name="phone" label="WhatsApp" type="tel"/>
           <Input name="device" label="Perangkat / model" required/><Input name="serial" label="Nomor seri"/>
@@ -330,7 +339,7 @@ function Desk({initialTicket}){
               <form onSubmit={e=>command(e,'assign',location)}>
                 <Select name="technician" label="Teknisi" choices={[
                   ['', 'Pilih teknisi'],
-                  ...technicians.map(t=>[t.user_id,t.email]),
+                  ...technicians.map(t=>[t.user_id,t.display_name||'(belum ada nama)']),
                 ]} value={technicians.some(t=>t.user_id===ticket.assigned)?ticket.assigned:''} key={technicians.map(t=>t.user_id).join(',')}/>
                 {technicians.length>0 ? <button className="assign-button" disabled={busy}>Simpan teknisi</button> :
                   <small>Jika daftar kosong, tambahkan peran Teknisi di cabang {name(location)} melalui Akses petugas.</small>}
