@@ -91,37 +91,6 @@ export default function Service(){
   return token ? <Track token={token}/> : db ? <Desk initialTicket={params.get('tiket')}/> :
     <main className="narrow"><h1>Makassar Computindo</h1><p>Konfigurasi Supabase belum diisi. Ikuti petunjuk pada README proyek.</p></main>;
 }
-// Laporan teknisi: tiket dikelompokkan menurut teknisi yang ditugaskan saat ini, dengan filter tanggal diterima (WITA).
-function TechReport({tickets}){
-  const [start,setStart]=useState(()=>today().slice(0,8)+'01');
-  const [end,setEnd]=useState(()=>today());
-  const from=Date.parse(start+'T00:00:00+08:00');
-  const until=Date.parse(end+'T00:00:00+08:00')+86400000;
-  const groups=new Map();
-  for(const t of tickets){
-    const c=Date.parse(t.created_at);
-    if(!(c>=from&&c<until))continue;
-    const key=t.assigned||'';
-    if(!groups.has(key))groups.set(key,{name:key?(t.technician||'(belum ada nama)'):'Belum ditugaskan',total:0,active:0,done:0,cancelled:0});
-    const g=groups.get(key);
-    g.total++;
-    if(t.status==='Dibatalkan')g.cancelled++;
-    else if(t.status==='Sudah diambil')g.done++;
-    else g.active++;
-  }
-  const rows=[...groups.values()].sort((a,b)=>b.total-a.total);
-  return <section className="panel"><h1>Laporan teknisi</h1>
-    <form className="row" onSubmit={e=>e.preventDefault()}>
-      <label>Dari<input type="date" value={start} onChange={e=>setStart(e.target.value)}/></label>
-      <label>Sampai<input type="date" value={end} onChange={e=>setEnd(e.target.value)}/></label>
-    </form>
-    <p className="muted">Tiket dihitung menurut tanggal diterima dan teknisi yang ditugaskan saat ini.</p>
-    {end<start?<p className="error" role="alert">Tanggal akhir harus sama dengan atau sesudah tanggal awal.</p>:
-    rows.length?<div className="scroll"><table><thead><tr><th>Teknisi</th><th>Total tiket</th><th>Sedang dikerjakan</th><th>Sudah diserahkan</th><th>Dibatalkan</th></tr></thead>
-      <tbody>{rows.map(r=><tr key={r.name}><td>{r.name}</td><td>{r.total}</td><td>{r.active}</td><td>{r.done}</td><td>{r.cancelled}</td></tr>)}</tbody></table></div>:
-    <p>Belum ada tiket pada periode ini.</p>}
-  </section>;
-}
 function Desk({initialTicket}){
   const [session,setSession]=useState(undefined), [members,setMembers]=useState([]);
   const [branches,setBranches]=useState([]), [tickets,setTickets]=useState([]), [events,setEvents]=useState([]);
@@ -317,7 +286,6 @@ function Desk({initialTicket}){
           {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
           {(owner||hasRole('admin'))&&<button className={view==='report-service'?'active':''} onClick={()=>setView('report-service')}>Laporan servis</button>}
           {(owner||hasRole('admin'))&&<button className={view==='report-tech'?'active':''} onClick={()=>setView('report-tech')}>Laporan teknisi</button>}
-          {hasRole('admin')&&<button className={view==='techreport'?'active':''} onClick={()=>{setView('techreport');setCreating(false);setSelected(null)}}>Laporan teknisi</button>}
           {owner&&<button className={view==='staff'?'active':''} onClick={openStaff}>Akses petugas</button>}
         </nav>
         <button className="sign-out" onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button>
@@ -339,7 +307,6 @@ function Desk({initialTicket}){
           run(async()=>{const {error}=await db.rpc('set_display_name',{person:u.user_id,name:f.get('name')});if(error)throw error;if(u.user_id===id)setMyName(String(f.get('name')).trim());await refreshStaff();});
         }}><span>{u.email}</span><input name="name" defaultValue={u.display_name||''} maxLength={80} placeholder="Nama tampilan" required/><button disabled={busy}>Simpan nama</button></form>)}
       </section>}
-      {view==='techreport'&&hasRole('admin')&&<TechReport tickets={tickets}/>}
       {view==='cash'&&hasRole('cashier')&&<section className="panel"><h1>Rekap kas</h1>
         <form className="grid" onSubmit={report}>
           <Input name="start" label="Tanggal mulai (WITA)" type="date" value={today()} required/>
