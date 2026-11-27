@@ -61,6 +61,7 @@ function Desk({initialTicket}){
   const [technicians,setTechnicians]=useState([]), [cash,setCash]=useState([]), [directory,setDirectory]=useState([]);
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
+  const [showPassword,setShowPassword]=useState(false);
   const [queue,setQueue]=useState('all');
   const detail=useRef(null);
   const id=session?.user?.id;
@@ -196,12 +197,16 @@ function Desk({initialTicket}){
     });
   }
   if(session===undefined)return <main>Memuat aplikasi…</main>;
-  if(!session)return <main className="login"><section className="login-brand"><strong>MAKASSAR COMPUTINDO</strong><h1>Sistem Servis</h1><p>Cabang Maros dan Makassar</p></section><section className="login-form"><h2>Masuk ke akun petugas</h2>
+  if(!session)return <main className="login"><section className="login-brand"><div className="login-mark" aria-hidden="true">MC</div><strong>MAKASSAR COMPUTINDO</strong><h1>Manajemen servis</h1><p>Cabang Maros dan Makassar</p></section><section className="login-form"><h2>Masuk ke akun petugas</h2><p className="muted">Gunakan email dan kata sandi akun kerja Anda.</p>
     <form className="grid" onSubmit={e=>{
       e.preventDefault();const f=new FormData(e.currentTarget);
       run(async()=>{const {error}=await db.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)throw error});
-    }}><Input name="email" label="Email" type="email" required/><Input name="password" label="Kata sandi" type="password" required/>
-      <button className="primary" disabled={busy}>Masuk</button></form>{error&&<p className="error" role="alert">{error}</p>}
+    }}><label>Email<input name="email" type="email" autoComplete="username" required placeholder="nama@contoh.com"/></label>
+      <label>Kata sandi</label><div className="login-password">
+        <input aria-label="Kata sandi" name="password" type={showPassword?'text':'password'} autoComplete="current-password" required/>
+        <button type="button" onClick={()=>setShowPassword(v=>!v)}>{showPassword?'Sembunyikan':'Tampilkan'}</button>
+      </div>
+      <button className="primary" disabled={busy}>{busy?'Sedang masuk…':'Masuk'}</button></form>{error&&<p className="error" role="alert">{error}</p>}
     </section></main>;
   const queues=[
     ['all','Semua servis',()=>true],
@@ -289,7 +294,16 @@ function Desk({initialTicket}){
             <label>Kelengkapan<input readOnly value={ticket.accessories}/></label>
             <label className="wide">Keluhan<textarea readOnly value={ticket.complaint}/></label>
             <label>Penerima<input readOnly value={ticket.receiver}/></label>
-            <label>Teknisi<input readOnly value={ticket.technician||'Belum ditugaskan'}/></label>
+            {active&&admin&&!ticket.destination ?
+              <form onSubmit={e=>command(e,'assign',location)}>
+                <Select name="technician" label="Teknisi" choices={[
+                  ['', 'Pilih teknisi'],
+                  ...technicians.map(t=>[t.user_id,t.email]),
+                ]} value={technicians.some(t=>t.user_id===ticket.assigned)?ticket.assigned:''} key={technicians.map(t=>t.user_id).join(',')}/>
+                {technicians.length>0 ? <button className="assign-button" disabled={busy}>Simpan teknisi</button> :
+                  <small>Jika daftar kosong, tambahkan peran Teknisi di cabang {name(location)} melalui Akses petugas.</small>}
+              </form> :
+              <label>Teknisi<input readOnly value={ticket.technician||'Belum ditugaskan'}/></label>}
           </div>
           <form className="grid ticket-fields" onSubmit={e=>command(e,'work',location)}>
             {work?<><Select name="status" label="Status servis" value={ticket.status} choices={statuses.map(s=>[s,s])}/>
@@ -308,9 +322,7 @@ function Desk({initialTicket}){
             {(can('admin',ticket.intake)||can('cashier',ticket.intake))&&<button disabled={busy} onClick={()=>preparePrint('receipt')}>Cetak tanda terima A4</button>}
             {ticket.picked_up_at&&(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&<button disabled={busy} onClick={()=>preparePrint('invoice')}>Cetak nota A4</button>}
           </div></section>
-        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Penugasan dan transfer</h2>
-          {technicians.length>0&&<form className="row" onSubmit={e=>command(e,'assign',location)}>
-            <Select name="technician" label="Teknisi" choices={technicians.map(t=>[t.user_id,t.email])} value={ticket.assigned}/><button disabled={busy}>Tugaskan</button></form>}
+        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Transfer antar-cabang</h2>
           <form className="row" onSubmit={e=>command(e,'send',location)}><Select name="target" label="Kirim ke cabang" choices={branchChoices.filter(([b])=>b!==location)}/><button disabled={busy}>Kirim barang</button></form>
         </section>}
         {active&&ticket.destination&&can('admin',ticket.destination)&&<section className="panel"><form onSubmit={e=>command(e,'receive',ticket.destination)}><button disabled={busy}>Konfirmasi terima di {name(ticket.destination)}</button></form></section>}

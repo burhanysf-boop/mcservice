@@ -85,3 +85,14 @@ dialog input[readonly],dialog textarea[readonly]{background:#f8fafc}
  dialog article{padding:13px}
  .login{margin:6vh auto}
 }
+.login{max-width:900px;min-height:420px}
+.login-brand{background:radial-gradient(ellipse at 90% 0%,#24619b 0%,transparent 55%),linear-gradient(155deg,#163957,#0d2035)}
+.login-mark{display:grid;place-items:center;width:58px;height:58px;margin-bottom:26px;border:1px solid #75a0ca;border-radius:14px;background:#ffffff15;font-size:21px;font-weight:800;letter-spacing:-.04em}
+.login-form{align-self:center}
+.login-form .grid{margin-top:22px}
+.login-form input{width:100%}
+.login-password{display:flex;gap:8px;margin-top:-8px}
+.login-password button{font-size:13px}
+.login-form .primary{margin-top:8px;padding:12px}
+.assign-button{margin-top:6px}
+.ticket-fields small{display:block;margin-top:5px}
