@@ -31,10 +31,18 @@ th{background:#f3f7fb;font-size:13px}
 .print-sheet{display:none}
 @media(max-width:600px){.grid{grid-template-columns:1fr}header{padding:12px 16px}.panel{padding:12px}}
 @page{size:A5 landscape;margin:8mm}
+@page report{size:A4 landscape;margin:10mm}
 @media print{
  body{background:white;color:#000;font:9pt Arial,sans-serif}
  body *{visibility:hidden!important}
  .print-sheet,.print-sheet *{visibility:visible!important}
+ .print-report,.print-report *{visibility:visible!important}
+ .print-report{page:report;position:absolute;left:0;top:0;width:100%}
+ .print-report h1{font-size:14pt;margin:0 0 2mm}
+ .print-report table{font-size:8.5pt}
+ .print-report th{background:white}
+ .report-controls .row{align-items:flex-end}
+ .report-controls label{min-width:150px}
  .print-sheet{display:block!important;position:absolute;left:0;top:0;width:100%;overflow-wrap:anywhere}
  .print-head{display:flex;justify-content:space-between;gap:8mm;border-bottom:1px solid black;margin-bottom:3mm;padding-bottom:2mm}
  .print-head h1{font-size:13pt}

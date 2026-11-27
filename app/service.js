@@ -92,6 +92,7 @@ function Desk({initialTicket}){
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
   const [myName,setMyName]=useState('');
+  const [reportView,setReportView]=useState({range:{start:today().slice(0,8)+'01',end:today()},branch:''});
   const [showPassword,setShowPassword]=useState(false);
   const [queue,setQueue]=useState('all');
   const detail=useRef(null);
@@ -263,6 +264,8 @@ function Desk({initialTicket}){
           {queues.map(([k,label])=><a key={k} href="/" className={view==='tickets'&&queue===k?'active':''}
             onClick={e=>{if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();setView('tickets');setQueue(k);setCreating(false);setSelected(null)}}>{label}</a>)}
           {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
+          {(owner||hasRole('admin'))&&<button className={view==='report-service'?'active':''} onClick={()=>setView('report-service')}>Laporan servis</button>}
+          {(owner||hasRole('admin'))&&<button className={view==='report-tech'?'active':''} onClick={()=>setView('report-tech')}>Laporan teknisi</button>}
           {owner&&<button className={view==='staff'?'active':''} onClick={openStaff}>Akses petugas</button>}
         </nav>
         <button className="sign-out" onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button>
@@ -293,6 +296,8 @@ function Desk({initialTicket}){
         </form>
         {cash.length?<ul>{cash.map(r=><li key={r.branch+r.event}>{name(r.branch)} · {eventNames[r.event]} · {money(r.amount)} ({r.transactions} transaksi)</li>)}</ul>:<p>Belum ada transaksi untuk ditampilkan.</p>}
       </section>}
+      {(view==='report-service'||view==='report-tech')&&(owner||hasRole('admin'))&&<Report kind={view==='report-service'?'service':'tech'} tickets={tickets} branches={branches}
+        range={reportView.range} setRange={r=>setReportView(s=>({...s,range:r}))} branch={reportView.branch} setBranch={b=>setReportView(s=>({...s,branch:b}))}/>}
       {view==='tickets'&&creating&&<section className="panel"><h1>Terima servis</h1>
         <form className="grid" onSubmit={e=>command(e,'create')}>
           <Select name="branch" label="Cabang penerimaan" choices={branchChoices.filter(([b])=>can('admin',b))}/>
@@ -318,7 +323,7 @@ function Desk({initialTicket}){
           <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
               if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
               e.preventDefault();setSelected(t.id);
-            }}>{t.number}</a><br/>{t.customer}</td><td>{t.phone||'—'}</td><td>{t.device}</td><td>{name(t.intake)}</td>
+            }}>{t.number}</a><br/>{t.customer}</td><td>{t.phone?<a href={'https://wa.me/'+t.phone.replace(/\D/g,'').replace(/^0/,'62')} target="_blank" rel="noreferrer">{t.phone}</a>:'—'}</td><td>{t.device}</td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td className="duration">{serviceDuration(t)}</td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
           {!visible.length&&<tr><td colSpan="9">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
@@ -415,6 +420,58 @@ function Desk({initialTicket}){
     </>}
   </>;
 }
+// Laporan servis dan laporan teknisi: dihitung dari tiket yang sudah dimuat untuk akun ini.
+function Report({kind,tickets,branches,range,setRange,branch,setBranch}){
+  const dateOf=v=>new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Makassar'}).format(new Date(v));
+  const bname=code=>branches.find(b=>b.code===code)?.name||code;
+  const rows=tickets.filter(t=>{const d=dateOf(t.created_at);return d>=range.start&&d<=range.end&&(!branch||t.intake===branch);});
+  const service=rows.map(t=>({number:t.number,tanggal:dateOf(t.created_at),customer:t.customer,phone:t.phone,device:t.device,complaint:t.complaint,
+    cabang:bname(t.intake),status:t.destination?'Dalam perjalanan':t.status,biaya:t.cost,dibayar:t.deposit+t.settlement,dikembalikan:t.refund,teknisi:t.technician||'—'}));
+  const byTech=new Map();
+  for(const t of rows){
+    const key=t.technician||'(belum ditugaskan)';
+    const r=byTech.get(key)||{nama:key,tiket:0,selesai:0,proses:0,jam:[]};
+    r.tiket++;
+    if(t.status==='Sudah diambil'){r.selesai++;r.jam.push((Date.parse(t.picked_up_at)-Date.parse(t.created_at))/3600000);}
+    else if(t.status!=='Dibatalkan')r.proses++;
+    byTech.set(key,r);
+  }
+  const tech=[...byTech.values()].map(r=>({nama:r.nama,tiket:r.tiket,selesai:r.selesai,proses:r.proses,rata:r.jam.length?(r.jam.reduce((a,b)=>a+b,0)/r.jam.length).toFixed(1):'—'}));
+  const cols=kind==='service'
+    ?[['No. Servis','number'],['Tgl terima','tanggal'],['Pelanggan','customer'],['WhatsApp','phone'],['Perangkat','device'],['Keluhan','complaint'],['Cabang','cabang'],['Status','status'],['Biaya','biaya'],['Dibayar','dibayar'],['Dikembalikan','dikembalikan'],['Teknisi','teknisi']]
+    :[['Teknisi','nama'],['Tiket','tiket'],['Selesai','selesai'],['Dalam proses','proses'],['Rata-rata lama (jam)','rata']];
+  const data=kind==='service'?service:tech;
+  const title=kind==='service'?'Laporan Servis':'Laporan Teknisi';
+  const file=`${kind==='service'?'laporan-servis':'laporan-teknisi'}-${range.start}_${range.end}`;
+  const shown=(c,r)=>{const v=r[c[1]];return ['biaya','dibayar','dikembalikan'].includes(c[1])?money(v):(v??'');};
+  const csv=()=>{
+    const esc=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
+    const lines=[cols.map(c=>esc(c[0])).join(','),...data.map(r=>cols.map(c=>esc(r[c[1]])).join(','))];
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}));
+    a.download=file+'.csv';a.click();URL.revokeObjectURL(a.href);
+  };
+  return <>
+    <section className="panel report-controls"><h1>{title}</h1>
+      <div className="row">
+        <label>Dari<input type="date" value={range.start} onChange={e=>setRange({...range,start:e.target.value})}/></label>
+        <label>Sampai<input type="date" value={range.end} onChange={e=>setRange({...range,end:e.target.value})}/></label>
+        <label>Cabang penerimaan<select value={branch} onChange={e=>setBranch(e.target.value)}><option value="">Semua cabang</option>{branches.map(b=><option key={b.code} value={b.code}>{b.name}</option>)}</select></label>
+        <button onClick={()=>window.print()}>Cetak A4</button>
+        <button className="primary" onClick={csv}>Unduh CSV (Excel)</button>
+      </div>
+      {range.end<range.start&&<p className="error" role="alert">Tanggal akhir harus sama dengan atau sesudah tanggal awal.</p>}
+    </section>
+    <section className="panel print-report">
+      <h1>{title}</h1>
+      <p>Periode {range.start} s.d. {range.end} · {branch?bname(branch):'Semua cabang'} · {data.length} baris</p>
+      <div className="scroll"><table><thead><tr>{cols.map(c=><th key={c[1]}>{c[0]}</th>)}</tr></thead>
+        <tbody>{data.map((r,i)=><tr key={i}>{cols.map(c=><td key={c[1]}>{shown(c,r)}</td>)}</tr>)}
+        {!data.length&&<tr><td colSpan={cols.length}>Tidak ada data pada periode ini.</td></tr>}</tbody></table></div>
+    </section>
+  </>;
+}
+
 // Dua pasang kolom per baris agar nota muat di A5 landscape.
 function pairRows(list){const rows=[];for(let i=0;i<list.length;i+=2)rows.push([list[i],list[i+1]]);return rows;}
 function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
