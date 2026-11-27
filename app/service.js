@@ -323,7 +323,7 @@ function Desk({initialTicket}){
         <button className="sign-out" onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button>
       </aside>
     <main className="dashboard">
-      <p className="muted">{members.map(m=>roles[m.role]+(m.role==='owner'?'':' '+name(m.branch))).join(' · ') || 'Peran belum tersedia. Hubungi pemilik.'}</p>
+      <p className="muted">{myName&&<strong>{myName}</strong>}{myName&&' · '}{members.map(m=>roles[m.role]+(m.role==='owner'?'':' '+name(m.branch))).join(' · ') || 'Peran belum tersedia. Hubungi pemilik.'}</p>
       {error&&<p className="panel error" role="alert">{error}</p>}
       {view==='staff'&&owner&&<section className="panel"><h1>Akses petugas</h1><p>Akun login dibuat di Supabase Auth. Tetapkan aksesnya di sini.</p>
         <form className="grid" onSubmit={e=>{e.preventDefault();const f=new FormData(e.currentTarget);roleChange(f.get('user'),f.get('role'),f.get('branch'),true)}}>
