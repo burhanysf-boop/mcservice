@@ -1,0 +1,112 @@
+-- Uji alur servis dan izin akses. Jalankan setelah 001–004 terpasang.
+-- Seluruh data uji dibatalkan di akhir (rollback), jadi aman dijalankan di database yang sudah berisi data.
+-- Contoh: psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/uji_service.sql
+-- Jika ada uji yang gagal, skrip berhenti dengan pesan "UJI GAGAL: ...".
+
+begin;
+
+-- Pengguna uji (hanya di dalam transaksi ini)
+insert into auth.users(id,email) values
+ ('10000000-0000-0000-0000-000000000001','uji-admin-mrs@uji'),
+ ('10000000-0000-0000-0000-000000000002','uji-teknisi-mrs@uji'),
+ ('10000000-0000-0000-0000-000000000003','uji-kasir-mrs@uji'),
+ ('10000000-0000-0000-0000-000000000004','uji-admin-mks@uji'),
+ ('10000000-0000-0000-0000-000000000005','uji-orang-luar@uji');
+insert into public.staff(user_id,role,branch) values
+ ('10000000-0000-0000-0000-000000000001','admin','MRS'),
+ ('10000000-0000-0000-0000-000000000002','technician','MRS'),
+ ('10000000-0000-0000-0000-000000000003','cashier','MRS'),
+ ('10000000-0000-0000-0000-000000000004','admin','MKS');
+
+-- Pembantu: memastikan perintah gagal dengan pesan tertentu
+create function pg_temp.harus_gagal(stmt text, pesan text) returns void language plpgsql as $$
+declare
+ gagal boolean := false;
+ teks text;
+begin
+ begin
+   execute stmt;
+ exception when others then
+   gagal := true;
+   teks := sqlerrm;
+ end;
+ if not gagal then raise exception 'UJI GAGAL: diharapkan error "%", tetapi perintah berhasil', pesan; end if;
+ if teks not like '%'||pesan||'%' then raise exception 'UJI GAGAL: diharapkan error "%", dapat "%"', pesan, teks; end if;
+ raise notice 'LULUS: %', pesan;
+end $$;
+
+create function pg_temp.harus(kondisi boolean, keterangan text) returns void language plpgsql as $$
+begin
+ if not coalesce(kondisi,false) then raise exception 'UJI GAGAL: %', keterangan; end if;
+ raise notice 'LULUS: %', keterangan;
+end $$;
+
+-- Helper: jalankan sebagai pengguna tertentu
+create function pg_temp.sebagai(uid uuid) returns void language plpgsql as $$
+begin
+ perform set_config('request.jwt.claim.sub', uid::text, true);
+ execute 'set local role authenticated';
+end $$;
+
+-- ===== Terima dan edit =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select public.service_command('create',null,'MRS','{"customer":"Budi","device":"Laptop","complaint":"Mati","receiver":"Ani","estimate":"100000"}',gen_random_uuid()) as t1 \gset
+select pg_temp.harus(exists(select 1 from public.tickets where id=:'t1' and status='Belum dicek'), 'tiket baru dibuat dengan status Belum dicek');
+select public.service_command('edit',:'t1','MRS','{"customer":"Budi Santoso","phone":"","device":"Laptop Asus","serial":"SN1","accessories":"Charger","complaint":"Mati total","receiver":"Ani"}',gen_random_uuid());
+select pg_temp.harus((select customer='Budi Santoso' and device='Laptop Asus' from public.tickets where id=:'t1'), 'edit mengubah data pelanggan');
+select pg_temp.harus_gagal($q$select public.service_command('edit','$q$||:'t1'||$q$','MRS','{"customer":"   "}',gen_random_uuid())$q$, 'violates check constraint');
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000004');
+select pg_temp.harus_gagal($q$select public.service_command('edit','$q$||:'t1'||$q$','MKS','{"customer":"X"}',gen_random_uuid())$q$, 'Tiket tidak tersedia');
+reset role;
+
+-- ===== Pembayaran dan pembatalan =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000003');
+select public.service_command('deposit',:'t1','MRS','{"amount":"30000","method":"Tunai"}',gen_random_uuid());
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select pg_temp.harus_gagal($q$select public.service_command('cancel','$q$||:'t1'||$q$','MRS','{"reason":"Batal","refund":"10000","method":"Tunai"}',gen_random_uuid())$q$, 'Pengembalian dana harus sama');
+select pg_temp.harus_gagal($q$select public.service_command('cancel','$q$||:'t1'||$q$','MRS','{"reason":"Batal","refund":"30000"}',gen_random_uuid())$q$, 'Metode pengembalian dana wajib diisi');
+select gen_random_uuid() as op \gset
+select public.service_command('cancel',:'t1','MRS','{"reason":"Pelanggan batal","refund":"30000","method":"Tunai"}',:'op') as cop \gset
+select pg_temp.harus((select status='Dibatalkan' and refund=30000 from public.tickets where id=:'t1'), 'pembatalan menutup tiket dan mencatat pengembalian');
+select pg_temp.harus(exists(select 1 from public.service_events where ticket=:'t1' and event='refund' and amount=30000), 'pengembalian dana tercatat sebagai kejadian');
+select pg_temp.harus(public.service_command('cancel',:'t1','MRS','{"reason":"Pelanggan batal","refund":"30000","method":"Tunai"}',:'op') = :'t1'::uuid, 'ulangi pembatalan dengan operation id yang sama tidak error');
+select pg_temp.harus((select count(*) from public.service_events where ticket=:'t1' and event='refund')=1, 'ulangi pembatalan tidak menggandakan pengembalian');
+select pg_temp.harus_gagal($q$select public.service_command('edit','$q$||:'t1'||$q$','MRS','{"customer":"Z"}',gen_random_uuid())$q$, 'Servis sudah dibatalkan');
+select pg_temp.harus_gagal($q$select public.service_command('token','$q$||:'t1'||$q$','MRS','{}',gen_random_uuid())$q$, 'Servis sudah dibatalkan');
+reset role;
+
+-- ===== Teknisi tidak boleh membatalkan atau mengubah data =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select public.service_command('create',null,'MRS','{"customer":"Cici","device":"HP","complaint":"Layar","receiver":"Ani"}',gen_random_uuid()) as t2 \gset
+select public.service_command('assign',:'t2','MRS','{"technician":"10000000-0000-0000-0000-000000000002","name":"uji-teknisi-mrs@uji"}',gen_random_uuid());
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000002');
+select pg_temp.harus_gagal($q$select public.service_command('cancel','$q$||:'t2'||$q$','MRS','{"reason":"Coba","refund":"0"}',gen_random_uuid())$q$, 'Akses ditolak');
+select pg_temp.harus_gagal($q$select public.service_command('edit','$q$||:'t2'||$q$','MRS','{"customer":"Coba"}',gen_random_uuid())$q$, 'Akses ditolak');
+reset role;
+
+-- ===== Tautan pelacakan =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select token as tok_lama from public.tickets where id=:'t2' \gset
+select public.service_command('token',:'t2','MRS','{}',gen_random_uuid());
+reset role;
+select pg_temp.harus((select count(*) from public.track_service(:'tok_lama'::uuid))=0, 'tautan pelacakan lama tidak bisa dibuka');
+select pg_temp.harus((select token from public.tickets where id=:'t2')<>:'tok_lama'::uuid, 'token diganti');
+
+-- ===== Akses orang luar dan riwayat status =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000005');
+select pg_temp.harus((select count(*) from public.tickets)=0, 'orang luar tidak bisa membaca tiket');
+select pg_temp.harus((select count(*) from public.ticket_history)=0, 'orang luar tidak bisa membaca riwayat status');
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000003');
+select pg_temp.harus((select count(*) from public.ticket_history where ticket_id=:'t2')>0, 'kasir MRS bisa membaca riwayat status tiket MRS');
+reset role;
+
+-- ===== Penghapusan akun =====
+delete from auth.users where id='10000000-0000-0000-0000-000000000002';
+select pg_temp.harus((select assigned is null from public.tickets where id=:'t2'), 'menghapus teknisi mengosongkan penugasan');
+select pg_temp.harus(exists(select 1 from public.service_events where ticket=:'t2' and actor_email='uji-admin-mrs@uji'), 'jejak audit tetap menyimpan email pelaku');
+
+rollback;
+\echo SEMUA UJI LULUS (data uji dibatalkan)

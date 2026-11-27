@@ -17,6 +17,16 @@ Aplikasi Next.js dengan Supabase Auth dan PostgreSQL untuk Maros dan Makassar.
 5. Tambahkan akun petugas lainnya di Authentication. Pemilik membuka **Akses petugas** untuk menetapkan peran dan cabang. Satu pengguna dapat memperoleh lebih dari satu peran.
 6. Isi `.env.local` dari `.env.example` dengan Project URL dan Publishable Key. Kunci secret dan service role tidak diperlukan.
 
+## Uji database
+
+Jalankan setelah 001–004 terpasang, misalnya ke proyek Supabase lokal atau database uji:
+
+```sh
+psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f supabase/tests/uji_service.sql
+```
+
+Uji membuat data sementara dan membatalkannya di akhir. Jika ada yang gagal, skrip berhenti dengan pesan `UJI GAGAL`.
+
 ## Lokal dan Vercel
 
 ```sh
