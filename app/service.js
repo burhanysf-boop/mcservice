@@ -360,14 +360,14 @@ function Desk({initialTicket}){
           <button disabled={busy} onClick={()=>run(async()=>setTickets(await loadTickets()))}>Muat ulang</button>
         </div>
         {initialTicket&&!opening&& !tickets.some(t=>t.id===initialTicket)&&<p>Tiket dari tautan tidak tersedia untuk akun ini.</p>}
-        <div className="scroll"><table><thead><tr><th>No. servis</th><th>Pelanggan</th><th>WhatsApp</th><th>Barang</th><th>Keluhan</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
+        <div className="scroll"><table><thead><tr><th>No. servis</th><th>Pelanggan</th><th>WhatsApp</th><th>Perangkat / Keluhan</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
           <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
               if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
               e.preventDefault();setSelected(t.id);
-            }}>{t.number}</a></td><td>{t.customer}</td><td><WaLink phone={t.phone}/></td><td>{t.device}</td><td>{t.complaint}</td><td>{name(t.intake)}</td>
+            }}>{t.number}</a></td><td><div>{t.customer}</div><small>{t.receiver}</small></td><td><WaLink phone={t.phone}/></td><td><strong>{t.device}</strong><br/><small>{t.complaint}</small></td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td className="duration">{serviceDuration(t)}</td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
-          {!visible.length&&<tr><td colSpan="11">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
+          {!visible.length&&<tr><td colSpan="10">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
       </section>}
       {view==='tickets'&&ticket&&!creating&&<dialog ref={detail} aria-labelledby="ticket-title" onClose={e=>{if(e.currentTarget.dataset.printing){delete e.currentTarget.dataset.printing;return}setSelected(null)}}><article key={ticket.id+ticket.updated_at}>
         <section className="panel"><div className="row between"><h2 id="ticket-title">Servis {ticket.number}</h2><button onClick={()=>detail.current?.close()}>Tutup</button></div>
