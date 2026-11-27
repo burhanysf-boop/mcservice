@@ -305,14 +305,14 @@ function Desk({initialTicket}){
           <button disabled={busy} onClick={()=>run(async()=>setTickets(await loadTickets()))}>Muat ulang</button>
         </div>
         {initialTicket&&!opening&& !tickets.some(t=>t.id===initialTicket)&&<p>Tiket dari tautan tidak tersedia untuk akun ini.</p>}
-        <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
+        <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>WhatsApp</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
           <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
               if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
               e.preventDefault();setSelected(t.id);
-            }}>{t.number}</a><br/>{t.customer}</td><td>{t.device}</td><td>{name(t.intake)}</td>
+            }}>{t.number}</a><br/>{t.customer}</td><td>{t.phone||'—'}</td><td>{t.device}</td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td className="duration">{serviceDuration(t)}</td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
-          {!visible.length&&<tr><td colSpan="8">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
+          {!visible.length&&<tr><td colSpan="9">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
       </section>}
       {view==='tickets'&&ticket&&!creating&&<dialog ref={detail} aria-labelledby="ticket-title" onClose={e=>{if(e.currentTarget.dataset.printing){delete e.currentTarget.dataset.printing;return}setSelected(null)}}><article key={ticket.id+ticket.updated_at}>
         <section className="panel"><div className="row between"><h2 id="ticket-title">Servis {ticket.number}</h2><button onClick={()=>detail.current?.close()}>Tutup</button></div>
@@ -406,6 +406,8 @@ function Desk({initialTicket}){
     </>}
   </>;
 }
+// Dua pasang kolom per baris agar nota muat di A5 landscape.
+function pairRows(list){const rows=[];for(let i=0;i<list.length;i+=2)rows.push([list[i],list[i+1]]);return rows;}
 function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
   const receipt=kind==='receipt';
   const booking=[['Perangkat',t.device],['Nomor seri',t.serial],['Kelengkapan',t.accessories],['Keluhan',t.complaint]];
@@ -418,9 +420,9 @@ function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
       <div><h1>{receipt?'Tanda Terima Servis':'Nota Servis'}</h1><strong>{t.number}</strong></div></div>
     <p>Pelanggan <strong>{t.customer}</strong> {t.phone&&'· '+t.phone.replace(/.(?=.{4})/g,'*')}</p>
     <p>Diterima {when(t.created_at)}{!receipt&&t.picked_up_at&&' · Diambil '+when(t.picked_up_at)}</p>
-    <table><tbody>{data.map(([k,v])=><tr key={k}><th scope="row">{k}</th><td>{v||'—'}</td></tr>)}</tbody></table>
+    <div className="print-body"><table className="print-pairs"><tbody>{pairRows(data).map(([a,b],i)=><tr key={i}><th scope="row">{a[0]}</th><td>{a[1]||'—'}</td><th scope="row">{b?.[0]||''}</th><td>{b?.[1]||''}</td></tr>)}</tbody></table>
     <section className="print-qr">{staff&&<div><PrintQr modules={staff} label="QR petugas"/>Buka tiket petugas</div>}
-      <div><PrintQr modules={customer} label="QR pelanggan"/>{receipt?'Lacak servis':'Lihat status dan garansi'}</div></section>
+      <div><PrintQr modules={customer} label="QR pelanggan"/>{receipt?'Lacak servis':'Lihat status dan garansi'}</div></section></div>
     {receipt&&<p>Bawa tanda terima ini saat pengambilan di Cabang {pickupName}.</p>}
     <section className="signatures"><span>{receipt?'Penerima · '+t.receiver:'Penyerah · '+(t.handed_by||'________________')}</span>
       <span>{receipt?'Pelanggan · '+t.customer:'Pengambil · '+(t.picked_by||'________________')}</span></section>
