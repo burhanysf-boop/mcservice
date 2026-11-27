@@ -10,7 +10,7 @@ button,input,select,textarea{font:inherit}
 button,a.button{border:1px solid #c5d2df;border-radius:8px;padding:9px 12px;background:#fff;color:#112842;font-weight:650;cursor:pointer;text-decoration:none}
 button:hover,a.button:hover{border-color:#185eb0}
 button:disabled{opacity:.55;cursor:wait}
-.primary,button.active{background:#1759a8;color:white;border-color:#1759a8}
+.primary,a.button.primary,button.active{background:#1759a8;color:white;border-color:#1759a8}
 .panel{background:#fff;border:1px solid #dce4ef;border-radius:12px;padding:18px;margin:14px 0}
 .narrow{max-width:530px;margin:50px auto}
 .row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
@@ -45,3 +45,5 @@ th{background:#f3f7fb;font-size:13px}
  .signatures{display:flex;justify-content:space-between;gap:15mm;margin-top:14mm!important}
  .signatures span{border-top:1px solid black;padding:2mm;min-width:36mm}
 }
+
+.ticket-link{color:#1759a8;font-weight:700;text-underline-offset:2px}

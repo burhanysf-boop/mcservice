@@ -196,7 +196,12 @@ function Desk({initialTicket}){
     <header><strong>Makassar Computindo · Servis</strong><button onClick={()=>run(async()=>{const r=await db.auth.signOut();if(r.error)throw r.error})}>Keluar</button></header>
     <main className="dashboard">
       <nav className="row">
-        <button className={view==='tickets'?'active':''} onClick={()=>{setView('tickets');setCreating(false);setSelected(null)}}>Tiket servis</button>
+        <a className={'button'+(view==='tickets'?' primary':'')} href="/" aria-current={view==='tickets'?'page':undefined}
+          onClick={e=>{
+            if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||initialTicket)return;
+            e.preventDefault();
+            setView('tickets');setCreating(false);setSelected(null);
+          }}>Tiket servis</a>
         {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
         {owner&&<button className={view==='staff'?'active':''} onClick={openStaff}>Akses petugas</button>}
       </nav>
@@ -240,7 +245,10 @@ function Desk({initialTicket}){
         </div>
         {initialTicket&&!opening&& !tickets.some(t=>t.id===initialTicket)&&<p>Tiket dari tautan tidak tersedia untuk akun ini.</p>}
         <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Aksi</th></tr></thead>
-          <tbody>{visible.map(t=><tr key={t.id}><td><strong>{t.number}</strong><br/>{t.customer}</td><td>{t.device}</td><td>{name(t.intake)}</td>
+          <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
+              if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+              e.preventDefault();setSelected(t.id);
+            }}>{t.number}</a><br/>{t.customer}</td><td>{t.device}</td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
             <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
           {!visible.length&&<tr><td colSpan="7">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
