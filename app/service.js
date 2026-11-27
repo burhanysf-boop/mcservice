@@ -100,6 +100,7 @@ function Desk({initialTicket}){
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
   const [myName,setMyName]=useState('');
+  const [customers,setCustomers]=useState([]);
   const [reportView,setReportView]=useState({range:{start:today().slice(0,8)+'01',end:today()},branch:''});
   const [showPassword,setShowPassword]=useState(false);
   const [queue,setQueue]=useState('all');
@@ -119,6 +120,7 @@ function Desk({initialTicket}){
   useEffect(()=>{
     if(!id)return;
     db.from('profiles').select('display_name').eq('user_id',id).maybeSingle().then(({data})=>setMyName(data?.display_name||''));
+    db.from('customers').select('name,phone,phone_key').order('name').then(({data})=>setCustomers(data||[]));
   },[id]);
   async function loadTickets(){
     const all=[];
@@ -230,6 +232,17 @@ function Desk({initialTicket}){
       setCash(data);
     });
   }
+  function saveNotes(e){
+    e.preventDefault();
+    const f=new FormData(e.currentTarget);
+    return run(async()=>{
+      const {error}=await db.rpc('set_ticket_notes',{ticket_id:ticket.id,notes:f.get('notes')});
+      if(error)throw error;
+      const {data:row,error:rowError}=await db.from('tickets').select('*').eq('id',ticket.id).single();
+      if(rowError)throw rowError;
+      setTickets(list=>list.map(t=>t.id===row.id?row:t));
+    });
+  }
   function deleteTicket(e){
     e.preventDefault();
     const f=new FormData(e.currentTarget);
@@ -323,7 +336,9 @@ function Desk({initialTicket}){
           <Select name="branch" label="Cabang penerimaan" choices={branchChoices.filter(([b])=>can('admin',b))}/>
           <label>Petugas penerima<input readOnly value={myName||'Nama belum diatur di Akses petugas'}/></label>
           <Select name="pickup" required={false} label="Cabang pengambilan" choices={[["","Sama dengan cabang penerimaan"],...branchChoices]}/>
-          <Input name="customer" label="Pelanggan" required maxLength={100}/><Input name="phone" label="WhatsApp" type="tel"/>
+          <label>Pelanggan<input name="customer" required maxLength={100} list="daftar-pelanggan" autoComplete="off" onChange={e=>{const c=customers.find(c=>c.name===e.target.value);if(c)e.target.form.elements.phone.value=c.phone}}/></label>
+          <label>WhatsApp<input name="phone" type="tel" autoComplete="off" onBlur={e=>{const k=e.target.value.replace(/\D/g,'');const c=k.length>=8&&customers.find(c=>c.phone_key===k);if(c)e.target.form.elements.customer.value=c.name}}/></label>
+          <datalist id="daftar-pelanggan">{customers.map(c=><option key={c.phone_key} value={c.name}>{c.phone}</option>)}</datalist>
           <Input name="device" label="Perangkat / model" required/><Input name="serial" label="Nomor seri"/>
           <Input name="accessories" label="Kelengkapan"/><Input name="estimate" label="Estimasi biaya (Rp)" type="number"/>
           <label className="wide">Keluhan<textarea name="complaint" required maxLength={400}/></label>
@@ -428,6 +443,11 @@ function Desk({initialTicket}){
             {ticket.deposit+ticket.settlement>0&&<Select name="method" label="Metode pengembalian" choices={['Tunai','QRIS','Transfer','Kartu'].map(m=>[m,m])}/>}
             <div className="wide"><button className="primary" disabled={busy}>Batalkan servis</button></div>
           </form></section>}
+        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Catatan nota</h2>
+          <form className="grid" onSubmit={saveNotes}>
+            <label className="wide">Catatan (tercetak di nota)<textarea name="notes" defaultValue={ticket.notes} maxLength={300}/></label>
+            <div className="wide"><button disabled={busy}>Simpan catatan</button></div>
+          </form></section>}
         {owner&&<section className="panel"><h2>Hapus tiket permanen</h2>
           <p className="muted">Tiket beserta riwayat pembayaran dan statusnya dihapus dari daftar dan tidak bisa dikembalikan. Salinan data tetap disimpan untuk pemilik.</p>
           <form className="grid" onSubmit={deleteTicket}>
@@ -507,7 +527,7 @@ function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
   const remaining=t.cost-t.deposit-t.settlement;
   const data=receipt?[...booking,['Estimasi biaya',money(t.estimate)],['DP diterima',money(t.deposit)]]:
     [...booking,['Tindakan',t.action_taken],['Total servis',money(t.cost)],['Uang muka',money(t.deposit)],
-     ['Pembayaran setelah DP',money(t.settlement)],['Metode pembayaran terakhir',t.method],['Sisa pembayaran',remaining>0?money(remaining)+' · BELUM LUNAS':'Rp0 · LUNAS'],['Garansi',t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada']];
+     ['Pembayaran setelah DP',money(t.settlement)],['Metode pembayaran terakhir',t.method],['Sisa pembayaran',remaining>0?money(remaining)+' · BELUM LUNAS':'Rp0 · LUNAS'],['Garansi',t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada'],...(t.notes?[['Catatan',t.notes]]:[])];
   return <div className="print-sheet">
     <div className="print-head"><div><strong>MAKASSAR COMPUTINDO</strong><p>Cabang {branch?.name}<br/>{branch?.address}<br/>{branch?.phone}</p></div>
       <div><h1>{receipt?'Tanda Terima Servis':'Nota Servis'}</h1><strong>{t.number}</strong></div></div>

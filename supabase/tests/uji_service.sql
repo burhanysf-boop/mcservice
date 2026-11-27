@@ -153,5 +153,22 @@ select pg_temp.harus(not exists(select 1 from public.service_events where ticket
 select pg_temp.harus(not exists(select 1 from public.ticket_history where ticket_id=:'t4'), 'riwayat status ikut dihapus');
 select pg_temp.harus(exists(select 1 from public.ticket_deletions where ticket_number=:'num_t4' and jsonb_array_length(snapshot->'events')>=1), 'salinan tiket tersimpan di ticket_deletions');
 
+-- ===== Pelanggan tetap dan catatan =====
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select public.service_command('create',null,'MRS','{"customer":"Rina","phone":"0811-1111-1111","device":"HP","complaint":"Layar","receiver":"x"}',gen_random_uuid()) as t5 \gset
+select public.service_command('create',null,'MRS','{"customer":"Rina S","phone":"081111111111","device":"Tablet","complaint":"Baterai","receiver":"x"}',gen_random_uuid()) as t6 \gset
+reset role;
+select pg_temp.harus((select count(*) from public.customers where phone_key='081111111111')=1, 'nomor yang sama hanya tersimpan sekali sebagai pelanggan tetap');
+select pg_temp.harus((select name='Rina S' from public.customers where phone_key='081111111111'), 'nama pelanggan tetap ikut diperbarui dari tiket terbaru');
+select pg_temp.harus((select customer_id from public.tickets where id=:'t5')=(select customer_id from public.tickets where id=:'t6'), 'kedua tiket menunjuk pelanggan yang sama');
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select public.set_ticket_notes(:'t5','Cek ulang setelah 3 hari');
+select pg_temp.harus((select notes='Cek ulang setelah 3 hari' from public.tickets where id=:'t5'), 'admin dapat menyimpan catatan nota');
+select pg_temp.harus_gagal($q$select public.set_ticket_notes('$q$||:'t5'||$q$','$q$||repeat('a',301)||$q$')$q$, 'Catatan maksimal 300 karakter');
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000005');
+select pg_temp.harus_gagal($q$select public.set_ticket_notes('$q$||:'t5'||$q$','Coba')$q$, 'Tiket tidak tersedia');
+reset role;
+
 rollback;
 \echo SEMUA UJI LULUS (data uji dibatalkan)

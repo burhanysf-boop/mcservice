@@ -4,7 +4,7 @@ Aplikasi Next.js dengan Supabase Auth dan PostgreSQL untuk Maros dan Makassar.
 
 ## Supabase
 
-1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql`, lalu `supabase/002_cabang.sql`, lalu `supabase/003_perbaikan.sql`, lalu `supabase/004_edit_batal_token.sql`, lalu `supabase/005_nama_petugas.sql`, lalu `supabase/006_hapus_tiket.sql` via SQL Editor. Proyek yang sudah memakai 002 cukup menjalankan 003 sampai 006 secara berurutan. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
+1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql`, lalu `supabase/002_cabang.sql`, lalu `supabase/003_perbaikan.sql`, lalu `supabase/004_edit_batal_token.sql`, lalu `supabase/005_nama_petugas.sql`, lalu `supabase/006_hapus_tiket.sql`, lalu `supabase/007_pelanggan_catatan.sql` via SQL Editor. Proyek yang sudah memakai 002 cukup menjalankan 003 sampai 007 secara berurutan. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
 2. Di Authentication, tambahkan pengguna dengan email dan kata sandi, lalu salin UUID pengguna pemilik. Nonaktifkan pendaftaran mandiri untuk aplikasi internal.
 3. Buat akses pemilik pertama via SQL Editor:
 
@@ -45,6 +45,8 @@ Buka http://localhost:3000. Untuk Vercel, tempatkan isi folder pada root reposit
 - Admin cabang lokasi barang dapat mengubah data pelanggan selama barang belum dikirim antar-cabang atau diserahkan. Setiap perubahan tercatat di riwayat tiket.
 - Admin cabang lokasi barang dapat membatalkan servis yang belum diserahkan. Pengembalian dana harus sama dengan uang yang sudah dibayar dan dicatat sebagai pengembalian dana. Tiket yang dibatalkan masuk antrean **Selesai**.
 - Pemilik dapat menghapus tiket secara permanen dari detail tiket, dengan alasan dan konfirmasi nomor servis. Tiket beserta riwayat pembayaran dan statusnya dihapus dari database. Salinan lengkapnya disimpan di tabel `ticket_deletions`, yang hanya bisa dibaca pemilik lewat SQL Editor. Penghapusan ini ikut mengurangi angka di rekap kas.
+- Pelanggan tetap disimpan otomatis dari setiap tiket, dengan nomor WhatsApp sebagai kunci. Saat membuat tiket, nama bisa dipilih dari daftar dan nomor terisi otomatis, atau sebaliknya. Nama dan nomor dari tiket terbaru menggantikan data pelanggan yang sama.
+- Admin cabang lokasi barang dapat menulis catatan di detail tiket. Catatan tercetak di nota, maksimal 300 karakter.
 - Admin dapat mengganti tautan pelacakan. Tautan dan QR lama tidak lagi bisa dibuka, sehingga tanda terima perlu dicetak ulang.
 - QR pelanggan dapat dibuka tanpa login dan hanya menampilkan nomor, perangkat, status, waktu pembaruan, lokasi pengambilan dan masa garansi. QR petugas membuka tiket sesuai hak akses setelah login.
 
