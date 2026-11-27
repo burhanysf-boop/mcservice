@@ -10,7 +10,7 @@ const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
 const db = url && key ? createClient(url, key) : null;
 const statuses = ['Belum dicek','Sedang dicek','Menunggu konfirmasi','Menunggu suku cadang','Sedang dikerjakan','Siap diambil'];
 const roles = { owner:'Pemilik', admin:'Admin cabang', technician:'Teknisi', cashier:'Kasir' };
-const eventNames = { create:'Barang diterima', assign:'Teknisi ditugaskan', send:'Barang dikirim', receive:'Transfer diterima', work:'Status diperbarui', deposit:'Uang muka', settlement:'Pembayaran', pickup:'Barang diserahkan' };
+const eventNames = { create:'Barang diterima', assign:'Teknisi ditugaskan', send:'Barang dikirim', receive:'Transfer diterima', work:'Status diperbarui', deposit:'Uang muka', settlement:'Pembayaran', pickup:'Barang diserahkan', edit:'Data pelanggan diubah', cancel:'Servis dibatalkan', refund:'Pengembalian dana', token:'Tautan pelacakan diganti' };
 const money = n => n == null ? '—' : 'Rp' + Number(n).toLocaleString('id-ID');
 const when = v => v ? new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Makassar'}).format(new Date(v))+' WITA' : '—';
 function serviceDuration(ticket) {
@@ -173,7 +173,9 @@ function Desk({initialTicket}){
       });
       if(error)throw error;
       setSelected(data);setCreating(false);
-      setTickets(await loadTickets());
+      const {data:row,error:rowError}=await db.from('tickets').select('*').eq('id',data).single();
+      if(rowError)throw rowError;
+      setTickets(list=>list.some(t=>t.id===row.id)?list.map(t=>t.id===row.id?row:t):[row,...list]);
       delete form.dataset.operation;
       delete form.dataset.payload;
       if(['deposit','settlement','pickup'].includes(cmd))form.reset();
@@ -240,13 +242,13 @@ function Desk({initialTicket}){
     </section></main>;
   const queues=[
     ['all','Semua servis',()=>true],
-    ['work','Proses servis',t=>Boolean(t.destination)||!['Siap diambil','Sudah diambil'].includes(t.status)],
+    ['work','Proses servis',t=>Boolean(t.destination)||!['Siap diambil','Sudah diambil','Dibatalkan'].includes(t.status)],
     ['ready','Siap diambil',t=>!t.destination&&t.status==='Siap diambil'],
-    ['done','Sudah diambil',t=>t.status==='Sudah diambil'],
+    ['done','Selesai',t=>['Sudah diambil','Dibatalkan'].includes(t.status)],
   ];
   const inQueue=queues.find(([k])=>k===queue)[2];
   const visible=tickets.filter(t=>inQueue(t)&&(!filter||t.intake===filter)&&[t.number,t.customer,t.device].some(s=>s.toLowerCase().includes(query.trim().toLowerCase())));
-  const location=ticket?.location, active=ticket && ticket.status!=='Sudah diambil';
+  const location=ticket?.location, active=ticket && !['Sudah diambil','Dibatalkan'].includes(ticket.status);
   const admin=ticket&&can('admin',location);
   const work=active&&!ticket.destination&&(admin||(ticket.assigned===id&&can('technician',location)));
   return <>
@@ -342,6 +344,7 @@ function Desk({initialTicket}){
             <><label>Status servis<input readOnly value={ticket.status}/></label><label>Garansi (hari)<input readOnly value={ticket.warranty}/></label>
             <label>Biaya akhir (Rp)<input readOnly value={ticket.cost??''}/></label></>}
             <label>Total sudah dibayar (Rp)<input readOnly value={ticket.deposit+ticket.settlement}/></label>
+            {ticket.refund>0&&<label>Dikembalikan (Rp)<input readOnly value={ticket.refund}/></label>}
             {work?<><label className="wide">Hasil pemeriksaan dan tindakan<textarea name="action_taken" defaultValue={ticket.action_taken} maxLength={500}/></label>
             <div className="wide"><button className="primary" disabled={busy}>Simpan pengerjaan</button></div></>:
             ticket.action_taken&&<label className="wide">Hasil pemeriksaan dan tindakan<textarea readOnly value={ticket.action_taken}/></label>}
@@ -351,7 +354,7 @@ function Desk({initialTicket}){
             {ticket.phone&&<a className="button" href={'https://wa.me/'+ticket.phone.replace(/\D/g,'').replace(/^0/,'62')+'?text='+encodeURIComponent('Halo, lacak servis '+ticket.number+' di '+tracking(ticket.token))} target="_blank" rel="noreferrer">Bagikan lewat WhatsApp</a>}
             {(can('admin',ticket.intake)||can('cashier',ticket.intake))&&<button disabled={busy} onClick={()=>preparePrint('receipt')}>Cetak tanda terima A4</button>}
             {(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&
-              <button disabled={busy||ticket.cost===null} onClick={()=>preparePrint('invoice')}>Cetak nota servis A4</button>}
+              <button disabled={busy||ticket.cost===null||ticket.status==='Dibatalkan'} onClick={()=>preparePrint('invoice')}>Cetak nota servis A4</button>}
           </div>
           {ticket.cost===null&&(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&
             <small>Isi dan simpan biaya akhir untuk mencetak nota servis.</small>}
@@ -369,6 +372,28 @@ function Desk({initialTicket}){
           <form className="row" onSubmit={e=>command(e,'pickup',ticket.pickup)}>
             <Input name="handed_by" label="Nama penyerah" required/><Input name="picked_by" label="Nama pengambil" required/><button disabled={busy}>Serahkan barang</button></form>
         </section>}
+        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Ubah data pelanggan</h2>
+          <form className="grid" onSubmit={e=>command(e,'edit',location)}>
+            <Input name="customer" label="Nama pelanggan" value={ticket.customer} required maxLength={100}/>
+            <Input name="phone" label="WhatsApp" type="tel" value={ticket.phone}/>
+            <Input name="device" label="Perangkat / model" value={ticket.device} required/>
+            <Input name="serial" label="Nomor seri" value={ticket.serial}/>
+            <Input name="accessories" label="Kelengkapan" value={ticket.accessories}/>
+            <Input name="receiver" label="Petugas penerima" value={ticket.receiver} required maxLength={80}/>
+            <label className="wide">Keluhan<textarea name="complaint" defaultValue={ticket.complaint} required maxLength={400}/></label>
+            <div className="wide"><button className="primary" disabled={busy}>Simpan data pelanggan</button></div>
+          </form></section>}
+        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Tautan pelacakan</h2>
+          <p className="muted">Ganti tautan jika tanda terima lama hilang atau tersebar. Tautan dan QR lama tidak lagi bisa dibuka, jadi cetak ulang tanda terima.</p>
+          <form className="row" onSubmit={e=>command(e,'token',location)}><button disabled={busy}>Ganti tautan pelacakan</button></form></section>}
+        {active&&admin&&!ticket.destination&&<section className="panel"><h2>Batalkan servis</h2>
+          <p className="muted">Pembatalan menutup tiket. Pengembalian dana harus sama dengan uang yang sudah dibayar.</p>
+          <form className="grid" onSubmit={e=>command(e,'cancel',location)}>
+            <Input name="reason" label="Alasan pembatalan" required maxLength={200}/>
+            <Input name="refund" label="Pengembalian dana (Rp)" type="number" value={ticket.deposit+ticket.settlement}/>
+            {ticket.deposit+ticket.settlement>0&&<Select name="method" label="Metode pengembalian" choices={['Tunai','QRIS','Transfer','Kartu'].map(m=>[m,m])}/>}
+            <div className="wide"><button className="primary" disabled={busy}>Batalkan servis</button></div>
+          </form></section>}
         <section className="panel"><h2>Riwayat tiket</h2><ul>{events.map(e=><li key={e.id}>{when(e.at)} · {name(e.branch)} · {eventNames[e.event]} {e.detail&&'· '+name(e.detail)} {e.amount&&'· '+money(e.amount)}</li>)}</ul></section>
       </article></dialog>}
     </main></div>
