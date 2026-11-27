@@ -100,7 +100,7 @@ function Desk({initialTicket}){
   const [error,setError]=useState(''), [busy,setBusy]=useState(false), [print,setPrint]=useState(null);
   const [opening,setOpening]=useState(initialTicket);
   const [myName,setMyName]=useState('');
-  const [customers,setCustomers]=useState([]);
+  const [customers,setCustomers]=useState([]), [custQuery,setCustQuery]=useState('');
   const [reportView,setReportView]=useState({range:{start:today().slice(0,8)+'01',end:today()},branch:''});
   const [showPassword,setShowPassword]=useState(false);
   const [queue,setQueue]=useState('all');
@@ -120,7 +120,7 @@ function Desk({initialTicket}){
   useEffect(()=>{
     if(!id)return;
     db.from('profiles').select('display_name').eq('user_id',id).maybeSingle().then(({data})=>setMyName(data?.display_name||''));
-    db.from('customers').select('name,phone,phone_key').order('name').then(({data})=>setCustomers(data||[]));
+    db.from('customers').select('name,phone,phone_key,updated_at').order('name').then(({data})=>setCustomers(data||[]));
   },[id]);
   async function loadTickets(){
     const all=[];
@@ -208,6 +208,10 @@ function Desk({initialTicket}){
     setView('staff');setCreating(false);setSelected(null);
     return run(refreshStaff);
   }
+  function openCustomers(){
+    setView('customers');setCreating(false);setSelected(null);
+    db.from('customers').select('name,phone,phone_key,updated_at').order('name').then(({data,error})=>{if(error)setError(friendly(error));else setCustomers(data||[])});
+  }
   async function refreshStaff(){
     const {data,error}=await db.rpc('staff_directory');
     if(error)throw error;
@@ -263,7 +267,7 @@ function Desk({initialTicket}){
         detail.current.dataset.printing='true';
         detail.current.close();
       }
-      setPrint({kind,ticket,customer,staff,branch:branches.find(b=>b.code===(kind==='receipt'?ticket.intake:ticket.pickup))});
+      setPrint({kind,ticket,customer,staff,printedBy:myName||session?.user?.email||'',printedAt:new Date().toISOString(),branch:branches.find(b=>b.code===(kind==='receipt'?ticket.intake:ticket.pickup))});
     });
   }
   if(session===undefined)return <main>Memuat aplikasi…</main>;
@@ -286,6 +290,10 @@ function Desk({initialTicket}){
   ];
   const inQueue=queues.find(([k])=>k===queue)[2];
   const visible=tickets.filter(t=>inQueue(t)&&(!filter||t.intake===filter)&&[t.number,t.customer,t.device].some(s=>s.toLowerCase().includes(query.trim().toLowerCase())));
+  const custNeedle=custQuery.trim().toLowerCase(), custDigits=custQuery.replace(/\D/g,'');
+  const customerRows=customers.filter(c=>!custNeedle||c.name.toLowerCase().includes(custNeedle)||(custDigits&&c.phone_key.includes(custDigits)));
+  const serviceCount=new Map();
+  tickets.forEach(t=>{const k=(t.phone||'').replace(/\D/g,'');serviceCount.set(k,(serviceCount.get(k)||0)+1)});
   const location=ticket?.location, active=ticket && !['Sudah diambil','Dibatalkan'].includes(ticket.status);
   const admin=ticket&&can('admin',location);
   const work=active&&!ticket.destination&&(admin||(ticket.assigned===id&&can('technician',location)));
@@ -296,6 +304,7 @@ function Desk({initialTicket}){
         <nav aria-label="Menu petugas">
           {queues.map(([k,label])=><a key={k} href="/" className={view==='tickets'&&queue===k?'active':''}
             onClick={e=>{if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;e.preventDefault();setView('tickets');setQueue(k);setCreating(false);setSelected(null)}}>{label}</a>)}
+          {members.length>0&&<button className={view==='customers'?'active':''} onClick={openCustomers}>Pelanggan</button>}
           {hasRole('cashier')&&<button className={view==='cash'?'active':''} onClick={()=>setView('cash')}>Rekap kas</button>}
           {(owner||hasRole('admin'))&&<button className={view==='report-service'?'active':''} onClick={()=>setView('report-service')}>Laporan servis</button>}
           {(owner||hasRole('admin'))&&<button className={view==='report-tech'?'active':''} onClick={()=>setView('report-tech')}>Laporan teknisi</button>}
@@ -331,6 +340,14 @@ function Desk({initialTicket}){
       </section>}
       {(view==='report-service'||view==='report-tech')&&(owner||hasRole('admin'))&&<Report kind={view==='report-service'?'service':'tech'} tickets={tickets} branches={branches}
         range={reportView.range} setRange={r=>setReportView(s=>({...s,range:r}))} branch={reportView.branch} setBranch={b=>setReportView(s=>({...s,branch:b}))}/>}
+      {view==='customers'&&members.length>0&&<section className="panel">
+        <div className="row between"><h1>Pelanggan</h1><span className="muted">{customers.length} pelanggan tersimpan otomatis dari tiket</span></div>
+        <div className="row"><input aria-label="Cari pelanggan" placeholder="Cari nama atau nomor WhatsApp" value={custQuery} onChange={e=>setCustQuery(e.target.value)}/></div>
+        <div className="scroll"><table><thead><tr><th>Nama</th><th>WhatsApp</th><th>Jumlah servis</th><th>Diperbarui</th><th>Aksi</th></tr></thead>
+          <tbody>{customerRows.map(c=><tr key={c.phone_key}><td>{c.name}</td><td><WaLink phone={c.phone}/></td><td>{serviceCount.get(c.phone_key)||0}</td><td>{when(c.updated_at)}</td>
+            <td><button onClick={()=>{setQuery(c.name);setQueue('all');setView('tickets');setCreating(false);setSelected(null)}}>Lihat servis</button></td></tr>)}
+          {!customerRows.length&&<tr><td colSpan="5">Tidak ada pelanggan yang cocok.</td></tr>}</tbody></table></div>
+      </section>}
       {view==='tickets'&&creating&&<section className="panel"><h1>Terima servis</h1>
         <form className="grid" onSubmit={e=>command(e,'create')}>
           <Select name="branch" label="Cabang penerimaan" choices={branchChoices.filter(([b])=>can('admin',b))}/>
@@ -521,13 +538,17 @@ function Report({kind,tickets,branches,range,setRange,branch,setBranch}){
 
 // Dua pasang kolom per baris agar nota muat di A5 landscape.
 function pairRows(list){const rows=[];for(let i=0;i<list.length;i+=2)rows.push([list[i],list[i+1]]);return rows;}
-function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
+// Syarat dan ketentuan yang dicetak di kaki nota.
+const notaTerms=['Jika barang tidak diambil lebih dari 3 bulan setelah adanya konfirmasi pengambilan barang sudah bukan tanggung jawab kami.','Garansi tidak berlaku jika Nota Servis hilang.'];
+const stamp=v=>new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit',hour12:false,timeZone:'Asia/Makassar'}).format(new Date(v)).replace(',','')+' WITA';
+function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName,printedBy,printedAt}){
   const receipt=kind==='receipt';
   const booking=[['Perangkat',t.device],['Nomor seri',t.serial],['Kelengkapan',t.accessories],['Keluhan',t.complaint]];
   const remaining=t.cost-t.deposit-t.settlement;
+  // Metode pembayaran dan garansi dipindah ke kaki nota agar tidak tercetak dua kali.
   const data=receipt?[...booking,['Estimasi biaya',money(t.estimate)],['DP diterima',money(t.deposit)]]:
     [...booking,['Tindakan',t.action_taken],['Total servis',money(t.cost)],['Uang muka',money(t.deposit)],
-     ['Pembayaran setelah DP',money(t.settlement)],['Metode pembayaran terakhir',t.method],['Sisa pembayaran',remaining>0?money(remaining)+' · BELUM LUNAS':'Rp0 · LUNAS'],['Garansi',t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada'],...(t.notes?[['Catatan',t.notes]]:[])];
+     ['Pembayaran setelah DP',money(t.settlement)],['Sisa pembayaran',remaining>0?money(remaining)+' · BELUM LUNAS':'Rp0 · LUNAS'],...(t.notes?[['Catatan',t.notes]]:[])];
   return <div className="print-sheet">
     <div className="print-head"><div><strong>MAKASSAR COMPUTINDO</strong><p>Cabang {branch?.name}<br/>{branch?.address}<br/>{branch?.phone}</p></div>
       <div><h1>{receipt?'Tanda Terima Servis':'Nota Servis'}</h1><strong>{t.number}</strong></div></div>
@@ -539,6 +560,13 @@ function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
     {receipt&&<p>Bawa tanda terima ini saat pengambilan di Cabang {pickupName}.</p>}
     <section className="signatures"><span>{receipt?'Penerima · '+t.receiver:'Penyerah · '+(t.handed_by||'________________')}</span>
       <span>{receipt?'Pelanggan · '+t.customer:'Pengambil · '+(t.picked_by||'________________')}</span></section>
+    {!receipt&&<section className="print-footer">
+      <p>Status Pembayaran <strong>{remaining>0?'BELUM LUNAS':'LUNAS'}</strong>. Metode Pembayaran <strong>{t.method||'—'}</strong>.</p>
+      <p>Garansi {t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada'}.</p>
+      <p>Nota ini dicetak {printedBy||'—'} [{printedAt?stamp(printedAt):'—'}]</p>
+      <p><strong>Syarat &amp; Ketentuan MAKASSAR COMPUTINDO :</strong></p>
+      <ol>{notaTerms.map(s=><li key={s}>{s}</li>)}</ol>
+    </section>}
   </div>;
 }
 

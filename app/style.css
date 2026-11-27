@@ -61,6 +61,9 @@ th{background:#f3f7fb;font-size:13px}
  .signatures{display:flex;justify-content:space-between;gap:10mm;margin-top:3mm!important}
  .signatures span{min-width:45mm;padding:0 2mm}
  .signatures span::before{content:"";display:block;height:10mm;border-bottom:1px solid black;margin-bottom:1mm}
+ .print-footer{font-size:7.5pt;margin-top:3mm;line-height:1.35}
+ .print-footer p{margin:0 0 0.5mm}
+ .print-footer ol{margin:1mm 0 0;padding-left:5mm}
 }
 
 .ticket-link{color:#1759a8;font-weight:700;text-underline-offset:2px}
