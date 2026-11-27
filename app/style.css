@@ -1,0 +1,47 @@
+*{box-sizing:border-box}
+body{margin:0;background:#f2f5f9;color:#13283f;font:15px system-ui,sans-serif}
+header{background:#112842;color:#fff;padding:16px max(22px,calc((100vw - 1180px)/2));display:flex;align-items:center;justify-content:space-between;gap:15px}
+main{width:min(1180px,calc(100% - 32px));margin:30px auto}
+h1,h2,h3,p{margin:0 0 12px}
+h1{font-size:clamp(25px,4vw,36px);letter-spacing:-.035em}
+h2{font-size:21px}
+small,.muted{color:#516478}
+button,input,select,textarea{font:inherit}
+button,a.button{border:1px solid #c5d2df;border-radius:8px;padding:9px 12px;background:#fff;color:#112842;font-weight:650;cursor:pointer;text-decoration:none}
+button:hover,a.button:hover{border-color:#185eb0}
+button:disabled{opacity:.55;cursor:wait}
+.primary,button.active{background:#1759a8;color:white;border-color:#1759a8}
+.panel{background:#fff;border:1px solid #dce4ef;border-radius:12px;padding:18px;margin:14px 0}
+.narrow{max-width:530px;margin:50px auto}
+.row{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+.between{justify-content:space-between}
+label{display:grid;gap:5px;font-weight:650}
+input,select,textarea{border:1px solid #b9c9da;border-radius:8px;padding:9px;min-width:0;background:white;color:inherit}
+textarea{resize:vertical}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;margin-bottom:16px}
+.wide{grid-column:1/-1}
+.scroll{overflow:auto}
+table{border-collapse:collapse;width:100%;text-align:left}
+th,td{padding:11px 8px;border-bottom:1px solid #e1e8ef;vertical-align:top}
+.dashboard table{min-width:740px}
+th{background:#f3f7fb;font-size:13px}
+.tag{display:inline-block;border-radius:20px;padding:4px 9px;background:#e5effd;color:#17477f;font-weight:700}
+.tag.done{background:#e0f4e8;color:#155533}
+.error{color:#a22323;overflow-wrap:anywhere}
+.print-sheet{display:none}
+@media(max-width:600px){.grid{grid-template-columns:1fr}header{padding:12px 16px}.panel{padding:12px}}
+@page{size:A4 portrait;margin:15mm}
+@media print{
+ body{background:white;color:#000;font:11pt Arial,sans-serif}
+ body > :not(.print-sheet){display:none!important}
+ .print-sheet{display:block!important;width:100%;overflow-wrap:anywhere}
+ .print-head{display:flex;justify-content:space-between;gap:12mm;border-bottom:1px solid black;margin-bottom:5mm;padding-bottom:4mm}
+ .print-head h1{font-size:17pt}
+ .print-sheet section{margin:5mm 0;break-inside:avoid}
+ .print-sheet th{background:white}
+ .print-sheet th,.print-sheet td{border-bottom:1px solid #777;padding:2mm}
+ .print-qr{display:flex;justify-content:space-around;text-align:center;gap:10mm}
+ .print-qr img{display:block;width:36mm;height:36mm;margin:auto}
+ .signatures{display:flex;justify-content:space-between;gap:15mm;margin-top:14mm!important}
+ .signatures span{border-top:1px solid black;padding:2mm;min-width:36mm}
+}
