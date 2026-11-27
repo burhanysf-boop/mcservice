@@ -134,5 +134,24 @@ delete from auth.users where id='10000000-0000-0000-0000-000000000002';
 select pg_temp.harus((select assigned is null from public.tickets where id=:'t2'), 'menghapus teknisi mengosongkan penugasan');
 select pg_temp.harus(exists(select 1 from public.service_events where ticket=:'t2' and actor_email='uji-admin-mrs@uji'), 'jejak audit tetap menyimpan email pelaku');
 
+-- ===== Hapus tiket (hanya pemilik) =====
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select public.service_command('create',null,'MRS','{"customer":"Dodi","device":"TV","complaint":"Mati","receiver":"Abaikan"}',gen_random_uuid()) as t4 \gset
+reset role;
+select number as num_t4 from public.tickets where id=:'t4' \gset
+insert into public.staff(user_id,role,branch) values ('10000000-0000-0000-0000-000000000004','owner','MKS');
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000001');
+select pg_temp.harus_gagal($q$select public.delete_ticket('$q$||:'t4'||$q$','Coba')$q$, 'Akses ditolak');
+reset role;
+select pg_temp.sebagai('10000000-0000-0000-0000-000000000004');
+select pg_temp.harus_gagal($q$select public.delete_ticket('$q$||:'t4'||$q$','   ')$q$, 'Alasan penghapusan wajib diisi');
+select public.delete_ticket(:'t4','Salah input');
+reset role;
+select pg_temp.harus(not exists(select 1 from public.tickets where id=:'t4'), 'tiket dihapus dari database');
+select pg_temp.harus(not exists(select 1 from public.service_events where ticket=:'t4'), 'riwayat layanan ikut dihapus');
+select pg_temp.harus(not exists(select 1 from public.ticket_history where ticket_id=:'t4'), 'riwayat status ikut dihapus');
+select pg_temp.harus(exists(select 1 from public.ticket_deletions where ticket_number=:'num_t4' and jsonb_array_length(snapshot->'events')>=1), 'salinan tiket tersimpan di ticket_deletions');
+
 rollback;
 \echo SEMUA UJI LULUS (data uji dibatalkan)

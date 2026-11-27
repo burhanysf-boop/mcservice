@@ -261,6 +261,18 @@ function Desk({initialTicket}){
       setCash(data);
     });
   }
+  function deleteTicket(e){
+    e.preventDefault();
+    const f=new FormData(e.currentTarget);
+    if(f.get('confirm')!==ticket.number){setError('Ketik nomor servis '+ticket.number+' dengan benar untuk konfirmasi.');return}
+    return run(async()=>{
+      const {error}=await db.rpc('delete_ticket',{ticket_id:ticket.id,reason:f.get('reason')});
+      if(error)throw error;
+      setTickets(list=>list.filter(t=>t.id!==ticket.id));
+      setSelected(null);
+      detail.current?.close();
+    });
+  }
   function preparePrint(kind){
     return run(async()=>{
       const customer=QRCode.create(tracking(ticket.token),{errorCorrectionLevel:'M'}).modules;
@@ -448,6 +460,13 @@ function Desk({initialTicket}){
             <Input name="refund" label="Pengembalian dana (Rp)" type="number" value={ticket.deposit+ticket.settlement}/>
             {ticket.deposit+ticket.settlement>0&&<Select name="method" label="Metode pengembalian" choices={['Tunai','QRIS','Transfer','Kartu'].map(m=>[m,m])}/>}
             <div className="wide"><button className="primary" disabled={busy}>Batalkan servis</button></div>
+          </form></section>}
+        {owner&&<section className="panel"><h2>Hapus tiket permanen</h2>
+          <p className="muted">Tiket beserta riwayat pembayaran dan statusnya dihapus dari daftar dan tidak bisa dikembalikan. Salinan data tetap disimpan untuk pemilik.</p>
+          <form className="grid" onSubmit={deleteTicket}>
+            <Input name="reason" label="Alasan penghapusan" required maxLength={200}/>
+            <Input name="confirm" label={'Ketik '+ticket.number+' untuk konfirmasi'} required/>
+            <div className="wide"><button className="primary" disabled={busy}>Hapus permanen</button></div>
           </form></section>}
         <section className="panel"><h2>Riwayat tiket</h2><ul>{events.map(e=><li key={e.id}>{when(e.at)} · {name(e.branch)} · {eventNames[e.event]} {e.detail&&'· '+name(e.detail)} {e.amount&&'· '+money(e.amount)}</li>)}</ul></section>
       </article></dialog>}
