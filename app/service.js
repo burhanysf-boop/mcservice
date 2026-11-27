@@ -13,6 +13,13 @@ const roles = { owner:'Pemilik', admin:'Admin cabang', technician:'Teknisi', cas
 const eventNames = { create:'Barang diterima', assign:'Teknisi ditugaskan', send:'Barang dikirim', receive:'Transfer diterima', work:'Status diperbarui', deposit:'Uang muka', settlement:'Pembayaran', pickup:'Barang diserahkan' };
 const money = n => n == null ? '—' : 'Rp' + Number(n).toLocaleString('id-ID');
 const when = v => v ? new Intl.DateTimeFormat('id-ID',{dateStyle:'medium',timeStyle:'short',timeZone:'Asia/Makassar'}).format(new Date(v))+' WITA' : '—';
+function serviceDuration(ticket) {
+  const minutes = Math.max(0, Math.floor(((ticket.picked_up_at ? Date.parse(ticket.picked_up_at) : Date.now()) - Date.parse(ticket.created_at)) / 60000));
+  if (minutes >= 1440) return Math.floor(minutes / 1440) + ' hari';
+  if (minutes >= 60) return Math.floor(minutes / 60) + ' jam';
+  return minutes + ' menit';
+}
+
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Makassar'}).format(new Date());
 const tracking = token => window.location.origin + '/?lacak=' + token;
 
@@ -117,16 +124,10 @@ function Desk({initialTicket}){
     const dialog=detail.current;
     if(dialog && !dialog.open)dialog.showModal();
   },[ticket?.id,view,creating]);
-  useEffect(()=>{
-    if(!print)return;
-    const dialog=detail.current;
-    if(dialog)dialog.dataset.printing='true';
-    dialog?.close();
-    try{window.print()}finally{
-      if(dialog?.isConnected&&!dialog.open)dialog.showModal();
-      setPrint(null);
-    }
-  },[print]);
+  function closePrint(){
+    setPrint(null);
+    detail.current?.showModal();
+  }
 
   async function run(task){
     if(busy)return;
@@ -191,8 +192,12 @@ function Desk({initialTicket}){
   }
   function preparePrint(kind){
     return run(async()=>{
-      const customer=await QRCode.toDataURL(tracking(ticket.token),{errorCorrectionLevel:'M',margin:4});
-      const staff=kind==='receipt' ? await QRCode.toDataURL(window.location.origin+'/?tiket='+ticket.id,{errorCorrectionLevel:'M',margin:4}) : null;
+      const customer=QRCode.create(tracking(ticket.token),{errorCorrectionLevel:'M'}).modules;
+      const staff=kind==='receipt' ? QRCode.create(window.location.origin+'/?tiket='+ticket.id,{errorCorrectionLevel:'M'}).modules : null;
+      if(detail.current?.open){
+        detail.current.dataset.printing='true';
+        detail.current.close();
+      }
       setPrint({kind,ticket,customer,staff,branch:branches.find(b=>b.code===(kind==='receipt'?ticket.intake:ticket.pickup))});
     });
   }
@@ -220,7 +225,7 @@ function Desk({initialTicket}){
   const admin=ticket&&can('admin',location);
   const work=active&&!ticket.destination&&(admin||(ticket.assigned===id&&can('technician',location)));
   return <>
-    <div className="service-shell">
+    <div className="service-shell" hidden={Boolean(print)}>
       <aside className="sidebar">
         <div className="sidebar-brand"><strong>Makassar Computindo</strong><span>Manajemen servis</span></div>
         <nav aria-label="Menu petugas">
@@ -273,14 +278,14 @@ function Desk({initialTicket}){
           <button disabled={busy} onClick={()=>run(async()=>setTickets(await loadTickets()))}>Muat ulang</button>
         </div>
         {initialTicket&&!opening&& !tickets.some(t=>t.id===initialTicket)&&<p>Tiket dari tautan tidak tersedia untuk akun ini.</p>}
-        <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Aksi</th></tr></thead>
+        <div className="scroll"><table><thead><tr><th>Tiket / pelanggan</th><th>Barang</th><th>Diterima</th><th>Lokasi barang</th><th>Ambil di</th><th>Status</th><th>Durasi</th><th>Aksi</th></tr></thead>
           <tbody>{visible.map(t=><tr key={t.id}><td><a className="ticket-link" href={'/?tiket='+t.id} onClick={e=>{
               if(e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
               e.preventDefault();setSelected(t.id);
             }}>{t.number}</a><br/>{t.customer}</td><td>{t.device}</td><td>{name(t.intake)}</td>
             <td>{name(t.location)}{t.destination&&' → '+name(t.destination)}</td><td>{name(t.pickup)}</td>
-            <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
-          {!visible.length&&<tr><td colSpan="7">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
+            <td><span className="tag">{t.destination?'Dalam perjalanan':t.status}</span></td><td className="duration">{serviceDuration(t)}</td><td><button onClick={()=>setSelected(t.id)}>Detail</button></td></tr>)}
+          {!visible.length&&<tr><td colSpan="8">Tidak ada tiket yang ditampilkan.</td></tr>}</tbody></table></div>
       </section>}
       {view==='tickets'&&ticket&&!creating&&<dialog ref={detail} aria-labelledby="ticket-title" onClose={e=>{if(e.currentTarget.dataset.printing){delete e.currentTarget.dataset.printing;return}setSelected(null)}}><article key={ticket.id+ticket.updated_at}>
         <section className="panel"><div className="row between"><h2 id="ticket-title">Servis {ticket.number}</h2><button onClick={()=>detail.current?.close()}>Tutup</button></div>
@@ -320,8 +325,12 @@ function Desk({initialTicket}){
             <a className="button" href={tracking(ticket.token)} target="_blank" rel="noreferrer">Lacak servis</a>
             {ticket.phone&&<a className="button" href={'https://wa.me/'+ticket.phone.replace(/\D/g,'').replace(/^0/,'62')+'?text='+encodeURIComponent('Halo, lacak servis '+ticket.number+' di '+tracking(ticket.token))} target="_blank" rel="noreferrer">Bagikan lewat WhatsApp</a>}
             {(can('admin',ticket.intake)||can('cashier',ticket.intake))&&<button disabled={busy} onClick={()=>preparePrint('receipt')}>Cetak tanda terima A4</button>}
-            {ticket.picked_up_at&&(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&<button disabled={busy} onClick={()=>preparePrint('invoice')}>Cetak nota A4</button>}
-          </div></section>
+            {(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&
+              <button disabled={busy||ticket.cost===null} onClick={()=>preparePrint('invoice')}>Cetak nota servis A4</button>}
+          </div>
+          {ticket.cost===null&&(can('admin',ticket.pickup)||can('cashier',ticket.pickup))&&
+            <small>Isi dan simpan biaya akhir untuk mencetak nota servis.</small>}
+        </section>
         {active&&admin&&!ticket.destination&&<section className="panel"><h2>Transfer antar-cabang</h2>
           <form className="row" onSubmit={e=>command(e,'send',location)}><Select name="target" label="Kirim ke cabang" choices={branchChoices.filter(([b])=>b!==location)}/><button disabled={busy}>Kirim barang</button></form>
         </section>}
@@ -338,25 +347,42 @@ function Desk({initialTicket}){
         <section className="panel"><h2>Riwayat tiket</h2><ul>{events.map(e=><li key={e.id}>{when(e.at)} · {name(e.branch)} · {eventNames[e.event]} {e.detail&&'· '+name(e.detail)} {e.amount&&'· '+money(e.amount)}</li>)}</ul></section>
       </article></dialog>}
     </main></div>
-    {print&&<PrintSheet {...print} pickupName={name(print.ticket.pickup)}/>}
+    {print&&<>
+      <div className="print-controls row">
+        <button onClick={closePrint}>Kembali ke tiket</button>
+        <button className="primary" onClick={()=>window.print()}>Cetak / Simpan PDF</button>
+      </div>
+      <PrintSheet {...print} pickupName={name(print.ticket.pickup)}/>
+    </>}
   </>;
 }
 function PrintSheet({kind,ticket:t,branch,staff,customer,pickupName}){
   const receipt=kind==='receipt';
   const booking=[['Perangkat',t.device],['Nomor seri',t.serial],['Kelengkapan',t.accessories],['Keluhan',t.complaint]];
+  const remaining=t.cost-t.deposit-t.settlement;
   const data=receipt?[...booking,['Estimasi biaya',money(t.estimate)],['DP diterima',money(t.deposit)]]:
     [...booking,['Tindakan',t.action_taken],['Total servis',money(t.cost)],['Uang muka',money(t.deposit)],
-     ['Pembayaran setelah DP',money(t.settlement)],['Metode pembayaran terakhir',t.method],['Sisa pembayaran','Rp0 · LUNAS'],['Garansi',t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada']];
+     ['Pembayaran setelah DP',money(t.settlement)],['Metode pembayaran terakhir',t.method],['Sisa pembayaran',remaining>0?money(remaining)+' · BELUM LUNAS':'Rp0 · LUNAS'],['Garansi',t.warranty?t.warranty+' hari sejak barang diambil':'Tidak ada']];
   return <div className="print-sheet">
     <div className="print-head"><div><strong>MAKASSAR COMPUTINDO</strong><p>Cabang {branch?.name}<br/>{branch?.address}<br/>{branch?.phone}</p></div>
       <div><h1>{receipt?'Tanda Terima Servis':'Nota Servis'}</h1><strong>{t.number}</strong></div></div>
     <p>Pelanggan <strong>{t.customer}</strong> {t.phone&&'· '+t.phone.replace(/.(?=.{4})/g,'*')}</p>
-    <p>Diterima {when(t.created_at)}{!receipt&&' · Diambil '+when(t.picked_up_at)}</p>
+    <p>Diterima {when(t.created_at)}{!receipt&&t.picked_up_at&&' · Diambil '+when(t.picked_up_at)}</p>
     <table><tbody>{data.map(([k,v])=><tr key={k}><th scope="row">{k}</th><td>{v||'—'}</td></tr>)}</tbody></table>
-    <section className="print-qr">{staff&&<div><img src={staff} alt="QR petugas"/>Buka tiket petugas</div>}
-      <div><img src={customer} alt="QR pelanggan"/>{receipt?'Lacak servis':'Lihat status dan garansi'}</div></section>
+    <section className="print-qr">{staff&&<div><PrintQr modules={staff} label="QR petugas"/>Buka tiket petugas</div>}
+      <div><PrintQr modules={customer} label="QR pelanggan"/>{receipt?'Lacak servis':'Lihat status dan garansi'}</div></section>
     {receipt&&<p>Bawa tanda terima ini saat pengambilan di Cabang {pickupName}.</p>}
-    <section className="signatures"><span>{receipt?'Penerima · '+t.receiver:'Penyerah · '+t.handed_by}</span>
-      <span>{receipt?'Pelanggan · '+t.customer:'Pengambil · '+t.picked_by}</span></section>
+    <section className="signatures"><span>{receipt?'Penerima · '+t.receiver:'Penyerah · '+(t.handed_by||'________________')}</span>
+      <span>{receipt?'Pelanggan · '+t.customer:'Pengambil · '+(t.picked_by||'________________')}</span></section>
   </div>;
+}
+
+function PrintQr({modules,label}){
+  const size=modules.size+8;
+  const marks=Array.from(modules.data,(filled,i)=>filled
+    ? 'M'+(i%modules.size+4)+' '+(Math.floor(i/modules.size)+4)+'h1v1h-1z' : '').join('');
+  return <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label={label} shapeRendering="crispEdges">
+    <rect width={size} height={size} fill="#fff"/>
+    <path d={marks} fill="#000"/>
+  </svg>;
 }

@@ -96,3 +96,14 @@ dialog input[readonly],dialog textarea[readonly]{background:#f8fafc}
 .login-form .primary{margin-top:8px;padding:12px}
 .assign-button{margin-top:6px}
 .ticket-fields small{display:block;margin-top:5px}
+
+.service-shell[hidden]{display:none}
+.duration{white-space:nowrap}
+.print-qr svg{display:block;width:36mm;height:36mm;margin:auto}
+@media screen{
+ .print-controls,.print-sheet{width:min(780px,calc(100% - 24px));margin:16px auto}
+ .print-sheet{display:block;background:#fff;border:1px solid #dce4ef;border-radius:12px;padding:clamp(14px,4vw,35px)}
+ .print-head,.print-qr,.signatures{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+ .print-qr{justify-content:space-around;text-align:center;margin:20px 0}
+ .signatures{margin-top:25px}
+}
