@@ -281,7 +281,7 @@ function Desk({initialTicket}){
         <h2>Nama petugas</h2><p className="muted">Nama ini dipakai sebagai petugas penerima dan nama teknisi pada tiket.</p>
         {[...new Map(directory.map(u=>[u.user_id,u])).values()].map(u=><form key={u.user_id} className="row" onSubmit={e=>{
           e.preventDefault();const f=new FormData(e.currentTarget);
-          run(async()=>{const {error}=await db.rpc('set_display_name',{person:u.user_id,name:f.get('name')});if(error)throw error;await refreshStaff();});
+          run(async()=>{const {error}=await db.rpc('set_display_name',{person:u.user_id,name:f.get('name')});if(error)throw error;if(u.user_id===id)setMyName(String(f.get('name')).trim());await refreshStaff();});
         }}><span>{u.email}</span><input name="name" defaultValue={u.display_name||''} maxLength={80} placeholder="Nama tampilan" required/><button disabled={busy}>Simpan nama</button></form>)}
       </section>}
       {view==='cash'&&hasRole('cashier')&&<section className="panel"><h1>Rekap kas</h1>
