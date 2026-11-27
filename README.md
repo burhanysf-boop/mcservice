@@ -4,7 +4,7 @@ Aplikasi Next.js dengan Supabase Auth dan PostgreSQL untuk Maros dan Makassar.
 
 ## Supabase
 
-1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql` lalu `supabase/002_cabang.sql` via SQL Editor. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
+1. Pada proyek Supabase baru untuk aplikasi ini, jalankan `supabase/001_servis.sql`, lalu `supabase/002_cabang.sql`, lalu `supabase/003_perbaikan.sql` via SQL Editor. Proyek yang sudah memakai 002 cukup menjalankan 003. Jika proyek sudah memiliki tabel atau migrasi, cocokkan skemanya terlebih dahulu. Migrasi kedua mempertahankan data skema awal dan menganggap staf awal sebagai pemilik serta tiket awal berasal dari Maros.
 2. Di Authentication, tambahkan pengguna dengan email dan kata sandi, lalu salin UUID pengguna pemilik. Nonaktifkan pendaftaran mandiri untuk aplikasi internal.
 3. Buat akses pemilik pertama via SQL Editor:
 

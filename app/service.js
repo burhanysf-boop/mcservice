@@ -23,6 +23,29 @@ function serviceDuration(ticket) {
 const today = () => new Intl.DateTimeFormat('sv-SE',{timeZone:'Asia/Makassar'}).format(new Date());
 const tracking = token => window.location.origin + '/?lacak=' + token;
 
+// Menerjemahkan error database menjadi pesan yang dapat dipahami petugas.
+function friendly(e) {
+  const m = e?.message || '';
+  if (/violates check constraint|violates not-null constraint/.test(m)) return 'Data tidak valid. Periksa nominal, biaya akhir, dan pembayaran yang sudah tercatat.';
+  if (/row-level security|permission denied/i.test(m)) return 'Akses ditolak untuk tindakan ini.';
+  if (/Failed to fetch|NetworkError|Load failed/i.test(m)) return 'Koneksi ke server gagal. Periksa jaringan lalu coba lagi.';
+  return m || 'Operasi gagal.';
+}
+
+// Memeriksa aturan pembayaran di sisi aplikasi agar petugas langsung melihat alasannya.
+function paymentProblem(t, cmd, fields) {
+  if (!t) return '';
+  const paid = t.deposit + t.settlement;
+  const amount = Number(fields.amount);
+  if (cmd === 'deposit' || cmd === 'settlement') {
+    if (!(amount > 0)) return 'Nominal pembayaran harus lebih dari nol.';
+    if (cmd === 'deposit' && t.cost != null && paid + amount > t.cost) return 'Uang muka melebihi sisa biaya (' + money(t.cost - paid) + ').';
+    if (cmd === 'settlement' && t.cost != null && amount > t.cost - paid) return 'Pelunasan melebihi sisa pembayaran (' + money(t.cost - paid) + ').';
+  }
+  if (cmd === 'work' && fields.cost != null && Number(fields.cost) < paid) return 'Biaya akhir tidak boleh lebih kecil dari yang sudah dibayar (' + money(paid) + ').';
+  return '';
+}
+
 function Input({ name, label, value, type='text', required=false, maxLength=120 }) {
   return <label>{label}<input name={name} type={type} defaultValue={value ?? ''} required={required}
     maxLength={maxLength} min={type==='number'?0:undefined} step={type==='number'?1:undefined}/></label>;
@@ -132,7 +155,7 @@ function Desk({initialTicket}){
   async function run(task){
     if(busy)return;
     setBusy(true);setError('');
-    try{await task()}catch(e){setError(e.message || 'Operasi gagal.')}
+    try{await task()}catch(e){setError(friendly(e))}
     finally{setBusy(false)}
   }
   function command(e,cmd,branch){
@@ -143,6 +166,8 @@ function Desk({initialTicket}){
     const form=e.currentTarget;
     const request= formOperation(form,fields);
     return run(async()=>{
+      const problem=paymentProblem(ticket,cmd,fields);
+      if(problem)throw Error(problem);
       const {data,error}=await db.rpc('service_command',{
         cmd,ticket_id:ticket?.id||null,branch_code:branch||fields.branch,fields,operation_id:request,
       });
